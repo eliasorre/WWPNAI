@@ -98,6 +98,7 @@ void O3_CPU::end_phase(unsigned finished_cpu)
   // Record where the phase ended (overwrite if this is later)
   sim_stats.end_instrs = num_retired;
   sim_stats.end_cycles = current_cycle;
+  bytecode_module.bb_buffer.generateStats();
   sim_stats.bb_mod = bytecode_module.stats;
   sim_stats.bb_stats = bytecode_module.bb_buffer.stats;
 
@@ -136,6 +137,7 @@ void O3_CPU::initialize_instruction()
         auto target = find_skip_target(queue_front);
         uint64_t predicted_next_bpc = bytecode_pc + BYTECODE_SIZE * BYTECODE_FETCH_TIME;
         if (hitInBB) {
+          sim_stats.hitsAndMissesAtPC[queue_front.ip].second++;
           if (target != nullptr) {
             // THIS SHOULD LATER USE THE BYTECODE BTB TO PREDICT NEXT TARGET
             bytecode_module.updateBranching(bytecode_pc);
@@ -144,8 +146,10 @@ void O3_CPU::initialize_instruction()
           shouldFetch = bytecode_module.bb_buffer.shouldFetch(predicted_next_bpc);
           if (shouldFetch) queue_front.ip = predicted_next_bpc;
         } else {
+          sim_stats.hitsAndMissesAtPC[queue_front.ip].first++;
           shouldFetch = bytecode_module.bb_buffer.shouldFetch(bytecode_pc);
           if (shouldFetch) queue_front.ip = bytecode_pc;
+          if (!shouldFetch) bytecode_module.bb_buffer.stats.inflightMisses++;
           bytecode_buffer_miss = true;
           if (target != nullptr) fetch_resume_cycle = std::numeric_limits<uint64_t>::max();
         }
@@ -186,27 +190,42 @@ void O3_CPU::initialize_instruction()
 
 ooo_model_instr* O3_CPU::find_skip_target(const ooo_model_instr &queue_front) {
   load_type last_ld_type = load_type::NOT_IMPLEMENTED;
-  uint64_t predicted_ip = 0;
+  uint64_t predicted_ip = 0, instr_iterated = 0;
   for (const ooo_model_instr& instr : input_queue) {
-    if (instr.ld_type == load_type::BYTECODE && instr.instr_id != queue_front.instr_id) { return nullptr; }
+    instr_iterated++;
+    if (instr.ld_type == load_type::BYTECODE && instr.instr_id != queue_front.instr_id) { 
+      sim_stats.stopppedEarly++;
+      sim_stats.StoppedEarlyPCs[queue_front.ip]++;  
+      return nullptr; 
+    }
     if (instr.ld_type == load_type::DISPATCH_TABLE) { predicted_ip = instr.load_val; }
 
     if (instr.ip == predicted_ip) {
       if (last_ld_type != load_type::JUMP_POINT) fmt::print(stderr, "Unormal operation\n");
+      sim_stats.foundSkipPCs[queue_front.ip]++;
       return const_cast<ooo_model_instr*>(&instr);
     }
     last_ld_type = instr.ld_type; 
   }
   for (const ooo_model_instr& instr : trace_queue) {
-    if (instr.ld_type == load_type::BYTECODE) { return nullptr; }
+    instr_iterated++;
+    if (instr.ld_type == load_type::BYTECODE) { 
+      sim_stats.stopppedEarly++;
+      sim_stats.StoppedEarlyPCs[queue_front.ip]++;  
+      return nullptr; 
+    }
     if (instr.ld_type == load_type::DISPATCH_TABLE) { predicted_ip = instr.load_val; }
 
     if (instr.ip == predicted_ip) {
       if (last_ld_type != load_type::JUMP_POINT) fmt::print(stderr, "Unormal operation\n");
+      sim_stats.foundSkipPCs[queue_front.ip]++;
       return const_cast<ooo_model_instr*>(&instr);
     } 
     last_ld_type = instr.ld_type; 
   }
+  fmt::print(stderr, "Not found skip target queue ip: {}, instructions looked at: {}, predicted ip: {} \n", queue_front.ip, instr_iterated, predicted_ip);
+  sim_stats.notFoundSkipTarget++;
+  sim_stats.notFoundSkipPCs[queue_front.ip]++;
   return nullptr;
 }
 

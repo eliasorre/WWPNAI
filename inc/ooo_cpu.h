@@ -123,6 +123,12 @@ struct cpu_stats {
   // branch predictions
   uint64_t wrongBytecodeJumpPredictions = 0;
   uint64_t correctBytecodeJumpPredictions = 0;
+  uint64_t notFoundSkipTarget = 0;
+  uint64_t stopppedEarly = 0;
+  std::map<uint64_t, int> StoppedEarlyPCs; 
+  std::map<uint64_t, int> notFoundSkipPCs; 
+  std::map<uint64_t, int> foundSkipPCs; 
+  std::map<uint64_t, std::pair<uint64_t, uint64_t>> hitsAndMissesAtPC;
 
   uint64_t instrs() const { return end_instrs - begin_instrs; }
   uint64_t cycles() const { return end_cycles - begin_cycles; }
@@ -225,7 +231,7 @@ public:
 
   const long IN_QUEUE_SIZE = 2 * FETCH_WIDTH;
   std::deque<ooo_model_instr> input_queue;
-  const long TRACE_QUEUE_SIZE = 3 * IN_QUEUE_SIZE;
+  const long TRACE_QUEUE_SIZE = 4 * IN_QUEUE_SIZE;
   std::deque<ooo_model_instr> trace_queue;
   std::deque<uint64_t> bytecode_dependent_instr_ids;
 

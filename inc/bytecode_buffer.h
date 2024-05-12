@@ -34,11 +34,31 @@ constexpr uint64_t BYTECODE_BRANCH_MISPREDICT_PENALTY = 4;
 constexpr uint64_t BB_DEBUG_LEVEL = 0; // 0 = NONE, 1 = WARNINGS, 2 = HITS AND MISSES, 3 = INFO 
 constexpr int STARTING_LRU_VAL = 1 << 12;
 
+struct BB_ENTRY_STATS {
+    uint8_t index; 
+    uint64_t timesSwitchedOut = 0;
+    uint64_t timesReset = 0;
+    uint64_t hits = 0;
+    uint64_t switched_with_no_hits = 0;
+
+    BB_ENTRY_STATS(uint8_t i, uint64_t switches, uint64_t resets, uint64_t hit, uint64_t nohit) {
+        index = i;
+        timesSwitchedOut = switches;
+        timesReset = resets;
+        hits = hit;
+        switched_with_no_hits = nohit;
+    }
+};
+
 struct BB_STATS {
     uint64_t hits;
     uint64_t miss;
     uint64_t totalMissWait;
     uint64_t prefetches = 0;
+    uint64_t inflightMisses = 0;
+    uint64_t duplicated_prefetches = 0;
+    uint64_t aggressive_prefetches = 0;
+    std::vector<BB_ENTRY_STATS> entryStats;
     double averageWaitTime() const { return (double) totalMissWait/ (double) miss; }
 };
 
@@ -46,6 +66,9 @@ struct BB_ENTRY {
     uint8_t index; 
     uint64_t timesSwitchedOut = 0;
     uint64_t timesReset = 0;
+    uint64_t hits = 0;
+    uint64_t hits_since_last_switch = 0;
+    uint64_t switched_with_no_hits = 0;
 
     uint64_t baseAddr;
     uint64_t maxAddr; 
@@ -61,8 +84,8 @@ struct BB_ENTRY {
     void prefetch(uint64_t sourceAddr, uint64_t currentCycle) {
         fetching = true;
         timesSwitchedOut++;
-        fetching_base_addr = sourceAddr - (FETCH_OFFSET * BYTECODE_SIZE);
-        fetching_max_addr = sourceAddr + ((BYTECODE_BUFFER_SIZE - FETCH_OFFSET) * BYTECODE_SIZE);
+        fetching_base_addr = (sourceAddr & ~1) - (FETCH_OFFSET * BYTECODE_SIZE);
+        fetching_max_addr = (sourceAddr & ~1) + ((BYTECODE_BUFFER_SIZE - FETCH_OFFSET) * BYTECODE_SIZE);
         fetchingEventCycle = currentCycle;
     }
     
@@ -85,6 +108,7 @@ class BYTECODE_BUFFER {
     BB_STATS stats;
     void printInterestingThings();
     void initialize();
+    void generateStats();
     void fetching(uint64_t baseAddr, uint64_t currentCycle);
     bool hitInBB(uint64_t sourceMemoryAddr);
     bool shouldFetch(uint64_t sourceMemoryAddr);

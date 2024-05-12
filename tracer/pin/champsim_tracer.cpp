@@ -57,7 +57,6 @@ trace_instr_format_t curr_instr;
 // Command line switches
 /* ===================================================================== */
 KNOB<std::string> KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool", "o", "champsim.trace", "specify file name for Champsim tracer output");
-KNOB<std::string> KnobDebugFile(KNOB_MODE_WRITEONCE, "pintool", "d", "tool_debug.out", "debug file");
 
 KNOB<UINT64> KnobSkipInstructions(KNOB_MODE_WRITEONCE, "pintool", "s", "0", "How many instructions to skip before tracing begins");
 
@@ -347,6 +346,7 @@ VOID Instruction(INS ins, VOID* v)
       0x267ed8, 0x2680ec, 0x2682ff, 0x268432, 0x26858f, 0x268641, 0x2686e7, 0x268a4e, 0x268c4c, 0x268d62, 0x268df6, 0x2693ae, 0x269570, 0x269720, 0x2699aa,
       0x269bd9, 0x269f5c, 0x26a2b1, 0x26a4b8, 0x26a747, 0x26a99c, 0x26ac52, 0x26af86, 0x26b19f, 0x26b4e2, 0x26b7fe, 0x26baa6, 0x26beaf, 0x26c124, 0x26c235,
       0x26c393, 0x26c4cd, 0x26c546, 0x26c5ed, 0x26c681, 0x26c793, 0x26cd40};
+
   ADDRINT insAddr = INS_Address(ins) - mainModuleBase;
   if (std::find_if(byteCodeLoadAddresses.begin(), byteCodeLoadAddresses.end(),
                    [insAddr](ADDRINT byteCodeLoadAddress) { return byteCodeLoadAddress == insAddr; })
@@ -458,10 +458,12 @@ VOID Fini(INT32 code, VOID* v)
   PIN_Sleep(KnobSleepTime.Value());
 
   outfile.close();
+  debugFile << std::hex << mainModuleBase << std::endl;
+  debugFile << std::dec << std::setprecision(64) << "Seen bytecodes: " << seenBytecodes << std::endl;
+  debugFile << std::setprecision(64) << "Seen dispatch table loads: " << seenTableLoads << std::endl;
+  debugFile << "Written instructions: " << tracedInstrCount << "\n";
   debugFile.close();
-  std::cout << std::setprecision(64) << "Seen bytecodes: " << seenBytecodes << std::endl;
-  std::cout << std::setprecision(64) << "Seen dispatch table loads: " << seenTableLoads << std::endl;
-  std::cout << "Written instructions: " << tracedInstrCount << "\n";
+
 
   auto end = std::chrono::high_resolution_clock::now();
   std::cout << "Execution time: " << std::setprecision(5) << ((double)std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count()) / 1000.0
@@ -484,7 +486,9 @@ int main(int argc, char* argv[])
   if (!PIN_MutexInit(&pinLock)) std::cout << "Couldn't fix mutex \n";
 
   outfile.open(KnobOutputFile.Value().c_str(), std::ios_base::binary | std::ios_base::trunc);
-  debugFile.open(KnobDebugFile.Value().c_str());
+  std::string debugFileName; 
+  debugFileName.append(KnobOutputFile.Value().c_str()).append("_debug");
+  debugFile.open(debugFileName);
   debugFile.setf(std::ios::showbase);
   if (!outfile) {
     std::cout << "Couldn't open output trace file. Exiting." << std::endl;

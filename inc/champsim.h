@@ -34,7 +34,6 @@ constexpr bool debug_print = true;
 #else
 constexpr bool debug_print = false;
 #endif
-
 // activate bytecode module to skip dispatch
 constexpr bool SKIP_DISPATCH = true; 
 } // namespace champsim
