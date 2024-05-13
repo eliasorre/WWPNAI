@@ -212,6 +212,9 @@ public:
   bytecode_map_entry* last_bytecode_map_entry = nullptr;
   predictedIP predictedDispatch; 
   std::set<uint64_t> would_be_skipped_instrs;
+  std::set<uint64_t> weirdBytecodeLoads;
+  std::set<uint64_t> weirdNonSkips;
+
 
   // Constants
   const std::size_t IFETCH_BUFFER_SIZE, DISPATCH_BUFFER_SIZE, DECODE_BUFFER_SIZE, ROB_SIZE, SQ_SIZE;
@@ -553,6 +556,7 @@ public:
   }
   void skip_forward(ooo_model_instr const& target_instr);
   ooo_model_instr* find_skip_target(const ooo_model_instr& queue_front);
+  void reorder_queues();
 };
 
 #include "ooo_cpu_module_def.inc"

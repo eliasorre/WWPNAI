@@ -62,7 +62,7 @@ long O3_CPU::operate()
     fmt::print("Heartbeat CPU {} instructions: {} cycles: {} heartbeat IPC: {:.4g} cumulative IPC: {:.4g} (Simulation time: {:%H hr %M min %S sec})\n", cpu,
                num_retired, current_cycle, heartbeat_instr / heartbeat_cycle, phase_instr / phase_cycle, elapsed_time());
     next_print_instruction += STAT_PRINTING_PERIOD;
-    
+
     // LOOK_INSIDE_CACHE_TO_SEE_BYTECODE_FILLS
 
     last_heartbeat_instr = num_retired;
@@ -117,12 +117,16 @@ void O3_CPU::initialize_instruction()
 
   while (current_cycle >= fetch_resume_cycle && instrs_to_read_this_cycle > 0 && !std::empty(input_queue)) {
     instrs_to_read_this_cycle--;
+    if (input_queue.front().ld_type == load_type::INITIAL_POINT || input_queue.front().ld_type == load_type::BYTECODE) {
+      reorder_queues();
+    }
+
     ooo_model_instr queue_front = input_queue.front();
     auto stop_fetch = do_init_instruction(queue_front);
 
     if constexpr (champsim::SKIP_DISPATCH) {
       // Add to IFETCH_BUFFER
-      if (queue_front.ld_type != load_type::BYTECODE) {
+      if (queue_front.ld_type != load_type::BYTECODE || queue_front.ld_type == load_type::INITIAL_POINT) {
         IFETCH_BUFFER.push_back(queue_front);
         input_queue.pop_front();
       } else {
@@ -131,7 +135,7 @@ void O3_CPU::initialize_instruction()
         int instr_oparg{0};
         if (queue_front.load_size != 8) {
           instr_oparg = (queue_front.load_val >> 8);
-        } 
+        }
         bool hitInBB = bytecode_module.bb_buffer.hitInBB(bytecode_pc);
         bool shouldFetch = false;
         auto target = find_skip_target(queue_front);
@@ -142,21 +146,25 @@ void O3_CPU::initialize_instruction()
             // THIS SHOULD LATER USE THE BYTECODE BTB TO PREDICT NEXT TARGET
             bytecode_module.updateBranching(bytecode_pc);
             predicted_next_bpc = bytecode_module.predict_branching(instr_opcode, instr_oparg, bytecode_pc);
-          } 
+          }
           shouldFetch = bytecode_module.bb_buffer.shouldFetch(predicted_next_bpc);
-          if (shouldFetch) queue_front.ip = predicted_next_bpc;
+          if (shouldFetch)
+            queue_front.ip = predicted_next_bpc;
         } else {
           sim_stats.hitsAndMissesAtPC[queue_front.ip].first++;
           shouldFetch = bytecode_module.bb_buffer.shouldFetch(bytecode_pc);
-          if (shouldFetch) queue_front.ip = bytecode_pc;
-          if (!shouldFetch) bytecode_module.bb_buffer.stats.inflightMisses++;
+          if (shouldFetch)
+            queue_front.ip = bytecode_pc;
+          if (!shouldFetch)
+            bytecode_module.bb_buffer.stats.inflightMisses++;
           bytecode_buffer_miss = true;
-          if (target != nullptr) fetch_resume_cycle = std::numeric_limits<uint64_t>::max();
+          if (target != nullptr)
+            fetch_resume_cycle = std::numeric_limits<uint64_t>::max();
         }
         if (shouldFetch) {
-          // We should fetch future bytecodes to the Bytecode buffer. The IP is set to be 
-          // equal to the address pointed to by the Bytecode-PC. We remove all other load 
-          // dependencies from this instruction, as the dependency is handled on the BB side 
+          // We should fetch future bytecodes to the Bytecode buffer. The IP is set to be
+          // equal to the address pointed to by the Bytecode-PC. We remove all other load
+          // dependencies from this instruction, as the dependency is handled on the BB side
           bytecode_module.bb_buffer.fetching(queue_front.ip, this->current_cycle);
           queue_front.source_memory = {};
           queue_front.source_registers = {};
@@ -179,7 +187,6 @@ void O3_CPU::initialize_instruction()
       IFETCH_BUFFER.push_back(queue_front);
       input_queue.pop_front();
     }
-    
 
     if (stop_fetch)
       instrs_to_read_this_cycle = 0;
@@ -188,49 +195,194 @@ void O3_CPU::initialize_instruction()
   }
 }
 
-ooo_model_instr* O3_CPU::find_skip_target(const ooo_model_instr &queue_front) {
+ooo_model_instr* O3_CPU::find_skip_target(const ooo_model_instr& queue_front)
+{
   load_type last_ld_type = load_type::NOT_IMPLEMENTED;
   uint64_t predicted_ip = 0, instr_iterated = 0;
+  uint64_t const knownBase = 0x58b3752e7000;
+  std::vector<std::pair<uint64_t, load_type>> ips;
   for (const ooo_model_instr& instr : input_queue) {
     instr_iterated++;
-    if (instr.ld_type == load_type::BYTECODE && instr.instr_id != queue_front.instr_id) { 
+    ips.push_back({instr.ip, instr.ld_type});
+    if (instr.ld_type == load_type::BYTECODE && instr.instr_id != queue_front.instr_id) {
       sim_stats.stopppedEarly++;
-      sim_stats.StoppedEarlyPCs[queue_front.ip]++;  
-      return nullptr; 
+      sim_stats.StoppedEarlyPCs[queue_front.ip]++;
+      return nullptr;
     }
-    if (instr.ld_type == load_type::DISPATCH_TABLE) { predicted_ip = instr.load_val; }
+    if (instr.ld_type == load_type::DISPATCH_TABLE) {
+      predicted_ip = instr.load_val;
+    }
+    if (instr.ld_type == load_type::COMBINED_JUMP) {
+      predicted_ip = instr.branch_target;
+    }
+    if (instr.ld_type == load_type::NOT_SKIP && weirdNonSkips.find(instr.ip) == weirdNonSkips.end()) {
+      weirdNonSkips.insert(instr.ip);
+      fmt::print(stderr, "[{}] Skipping non-skippable instr, front {:x} curr_instr {:x} iterated {} predicted_ip: {:x} \n", queue_front.instr_id, queue_front.ip - knownBase, instr.ip - knownBase, instr_iterated, predicted_ip - knownBase);
+      int i = 0;
+      for (auto const& ip : ips) {
+        fmt::print(stderr, "\t[{}] {:x} {}  \n", i++, ip.first - knownBase, ip.second);
+      }
+    }
 
     if (instr.ip == predicted_ip) {
-      if (last_ld_type != load_type::JUMP_POINT) fmt::print(stderr, "Unormal operation\n");
+      if (last_ld_type != load_type::JUMP_POINT && last_ld_type != load_type::COMBINED_JUMP) {
+        if (weirdBytecodeLoads.find(queue_front.ip) == weirdBytecodeLoads.end()) {
+          weirdBytecodeLoads.insert(queue_front.ip);
+          fmt::print(stderr, "Unormal operation: {:x} {:x} \n", queue_front.ip - knownBase, instr.ip - knownBase);
+        }
+      }
       sim_stats.foundSkipPCs[queue_front.ip]++;
       return const_cast<ooo_model_instr*>(&instr);
     }
-    last_ld_type = instr.ld_type; 
+
+    last_ld_type = instr.ld_type;
   }
   for (const ooo_model_instr& instr : trace_queue) {
     instr_iterated++;
-    if (instr.ld_type == load_type::BYTECODE) { 
+    ips.push_back({instr.ip, instr.ld_type});
+    if (instr.ld_type == load_type::BYTECODE) {
       sim_stats.stopppedEarly++;
-      sim_stats.StoppedEarlyPCs[queue_front.ip]++;  
-      return nullptr; 
+      sim_stats.StoppedEarlyPCs[queue_front.ip]++;
+      return nullptr;
     }
-    if (instr.ld_type == load_type::DISPATCH_TABLE) { predicted_ip = instr.load_val; }
+    if (instr.ld_type == load_type::DISPATCH_TABLE) {
+      predicted_ip = instr.load_val;
+    }
+    if (instr.ld_type == load_type::COMBINED_JUMP) {
+      predicted_ip = instr.branch_target;
+    }
+    if (instr.ld_type == load_type::NOT_SKIP && weirdNonSkips.find(instr.ip) == weirdNonSkips.end()) {
+      weirdNonSkips.insert(instr.ip);
+      fmt::print(stderr, "[{}] Skipping non-skippable instr, front {:x} curr_instr {:x} iterated {} predicted_ip: {:x} \n", queue_front.instr_id, queue_front.ip - knownBase, instr.ip - knownBase, instr_iterated, predicted_ip - knownBase);
+      int i = 0;
+      for (auto const& ip : ips) {
+        fmt::print(stderr, "\t[{}] {:x} {}  \n", i++, ip.first - knownBase, ip.second);
+      }
+    }
 
     if (instr.ip == predicted_ip) {
-      if (last_ld_type != load_type::JUMP_POINT) fmt::print(stderr, "Unormal operation\n");
+      if (last_ld_type != load_type::JUMP_POINT && last_ld_type != load_type::COMBINED_JUMP) {
+        if (weirdBytecodeLoads.find(queue_front.ip) == weirdBytecodeLoads.end()) {
+          weirdBytecodeLoads.insert(queue_front.ip);
+          fmt::print(stderr, "Unormal operation: {:x}, {:x} \n", queue_front.ip - knownBase, instr.ip - knownBase);
+        }
+      }
       sim_stats.foundSkipPCs[queue_front.ip]++;
       return const_cast<ooo_model_instr*>(&instr);
-    } 
-    last_ld_type = instr.ld_type; 
+    }
+    last_ld_type = instr.ld_type;
   }
-  fmt::print(stderr, "Not found skip target queue ip: {}, instructions looked at: {}, predicted ip: {} \n", queue_front.ip, instr_iterated, predicted_ip);
+  // fmt::print(stderr, "Not found skip target queue ip: {:x}, instructions looked at: {}, predicted ip: {} \n", queue_front.ip, instr_iterated, predicted_ip);
   sim_stats.notFoundSkipTarget++;
   sim_stats.notFoundSkipPCs[queue_front.ip]++;
+  fmt::print(stderr, "Unormal operation, not found: {:x} \n", queue_front.ip - knownBase);
   return nullptr;
 }
 
+// Reorder instructions such that the dispatch section is atomic and starts with a bytecode load
+void O3_CPU::reorder_queues()
+{
+  std::deque<ooo_model_instr> non_skip_instrs, dispatch_instrs;
+  bool reorder_needed = false, reached_end = false;
+  auto instrId_front = input_queue.front().instr_id;
+  fmt::print(stderr, "reordering at {} \n", instrId_front);
+  std::deque<uint64_t> instrIps;
+  for (auto const& instr : input_queue) {
+    if (instr.instr_id == instrId_front)
+      continue;
+    if (instr.ld_type == load_type::BYTECODE || instr.ld_type == load_type::NOT_SKIP) {
+      reorder_needed = true;
+      break;
+    }
+    if (instr.ld_type == load_type::COMBINED_JUMP || instr.ld_type == load_type::JUMP_POINT) {
+      reached_end = true;
+      break;
+    }
+  }
+  if (!reached_end) {
+    for (auto const& instr : trace_queue) {
+      if (instr.instr_id == instrId_front)
+        continue;
+      if (instr.ld_type == load_type::BYTECODE || instr.ld_type == load_type::NOT_SKIP) {
+        reorder_needed = true;
+        break;
+      }
+      if (instr.ld_type == load_type::COMBINED_JUMP || instr.ld_type == load_type::JUMP_POINT) {
+        reached_end = true;
+        break;
+      }
+    }
+  }
+  if (reorder_needed) {
+    auto const size_input_queue = input_queue.size();    
+    auto const total_queue_size = input_queue.size() + trace_queue.size();    
+    uint64_t const knownBase = 0x58b3752e7000;
+    int poped_elems = 0;
+    while (reorder_needed) {
+      ooo_model_instr instr = input_queue.empty() ? trace_queue.front() : input_queue.front();
+      fmt::print(stderr, "popped {:x} size input queue {} size trace queue {}\n", instr.ip - knownBase, input_queue.size(), trace_queue.size());
+      instrIps.push_back(instr.ip);
+      if (instr.ld_type == load_type::NOT_SKIP) {
+        non_skip_instrs.push_back(instr);
+      } else if (instr.ld_type == load_type::BYTECODE) {
+        dispatch_instrs.push_front(instr);
+      } else if (instr.ld_type == load_type::COMBINED_JUMP || instr.ld_type == load_type::JUMP_POINT) {
+        dispatch_instrs.push_back(instr);
+        reorder_needed = false;
+      } else {
+        dispatch_instrs.push_back(instr);
+      }
+      input_queue.empty() ? trace_queue.pop_front() : input_queue.pop_front();
+      poped_elems++;
+    }
+
+    while (!dispatch_instrs.empty()) {
+      if (poped_elems > static_cast<int>(size_input_queue)) {
+        fmt::print(stderr, "pushing dispatch {:x} to trace queue at {} popped {} size {} \n", dispatch_instrs.back().ip - knownBase, dispatch_instrs.back().instr_id, poped_elems, size_input_queue);
+        trace_queue.push_front(dispatch_instrs.back());
+      } else {
+        fmt::print(stderr, "pushing dispatch {:x} to input queue at {} popped {} size {} \n", dispatch_instrs.back().ip - knownBase, dispatch_instrs.back().instr_id, poped_elems, size_input_queue);
+        input_queue.push_front(dispatch_instrs.back());
+      }
+      poped_elems--;
+      dispatch_instrs.pop_back();
+    }
+
+    while (!non_skip_instrs.empty()) {
+      if (poped_elems > static_cast<int>(size_input_queue)) {
+        fmt::print(stderr, "pushing non skip {:x} to trace queue at {} popped {} size {} \n", non_skip_instrs.back().ip - knownBase, non_skip_instrs.back().instr_id, poped_elems, size_input_queue);
+        trace_queue.push_front(non_skip_instrs.back());
+      } else {
+        fmt::print(stderr, "pushing non skip {:x} to input queue at {} popped {}  size {}\n", non_skip_instrs.back().ip - knownBase, non_skip_instrs.back().instr_id, poped_elems, size_input_queue);
+        input_queue.push_front(non_skip_instrs.back());
+      }
+      poped_elems--;
+      non_skip_instrs.pop_back();
+    }
+
+    for (auto& instr : input_queue) {
+      if (!instrIps.empty()) {
+        instr.ip = instrIps.front();
+        instrIps.pop_front();
+      }
+      instr.instr_id = instrId_front++;
+    }
+    if (!instrIps.empty()) {
+      for (auto& instr : trace_queue) {
+        if (!instrIps.empty()) {
+          instr.ip = instrIps.front();
+          instrIps.pop_front();
+        }
+        instr.instr_id = instrId_front++;
+      }
+    }
+    if (total_queue_size != input_queue.size() + trace_queue.size()) exit(123);
+  }
+}
+
 // Skips forward until target instr, removing every instruction until that point from the queue
-void O3_CPU::skip_forward(ooo_model_instr const &target_instr) {
+void O3_CPU::skip_forward(ooo_model_instr const& target_instr)
+{
   while (input_queue.front().instr_id < target_instr.instr_id && !trace_queue.empty()) {
     input_queue.pop_front();
     if (!trace_queue.empty()) {
@@ -325,7 +477,7 @@ long O3_CPU::check_dib()
   // scan through IFETCH_BUFFER to find instructions that hit in the decoded instruction buffer
   auto begin = std::find_if(std::begin(IFETCH_BUFFER), std::end(IFETCH_BUFFER), [](const ooo_model_instr& x) { return !x.dib_checked; });
   auto [window_begin, window_end] = champsim::get_span(begin, std::end(IFETCH_BUFFER), FETCH_WIDTH);
-  std::for_each(window_begin, window_end, [this](auto& ifetch_entry){ this->do_check_dib(ifetch_entry); });
+  std::for_each(window_begin, window_end, [this](auto& ifetch_entry) { this->do_check_dib(ifetch_entry); });
   return std::distance(window_begin, window_end);
 }
 
@@ -340,7 +492,8 @@ void O3_CPU::do_check_dib(ooo_model_instr& instr)
       // return result of fetching bytecode instructions to the Bytecode buffer
       if (instr.ld_type == load_type::BYTECODE) {
         bytecode_module.bb_buffer.updateBufferEntry(instr.ip, this->current_cycle);
-        if constexpr (BB_DEBUG_LEVEL > 2) fmt::print("[BYTECODE BUFFER] entry was in dib, instr id {}, pc {} \n", instr.instr_id, instr.ip);
+        if constexpr (BB_DEBUG_LEVEL > 2)
+          fmt::print("[BYTECODE BUFFER] entry was in dib, instr id {}, pc {} \n", instr.instr_id, instr.ip);
         if (bytecode_buffer_miss && fetch_resume_cycle > this->current_cycle) {
           fetch_resume_cycle = this->current_cycle;
         }
@@ -397,16 +550,17 @@ bool O3_CPU::do_fetch_instruction(std::deque<ooo_model_instr>::iterator begin, s
   fetch_packet.instr_id = begin->instr_id;
   fetch_packet.ip = begin->ip;
   fetch_packet.instr_depend_on_me = {begin, end};
-  fetch_packet.ld_type = (LOAD_TYPE) begin->ld_type; 
+  fetch_packet.ld_type = (LOAD_TYPE)begin->ld_type;
 
   if constexpr (champsim::debug_print) {
     fmt::print("[IFETCH] {} instr_id: {} ip: {:#x} dependents: {} event_cycle: {} load_type: {}\n", __func__, begin->instr_id, begin->ip,
-               std::size(fetch_packet.instr_depend_on_me), begin->event_cycle, (unsigned) begin->ld_type);
+               std::size(fetch_packet.instr_depend_on_me), begin->event_cycle, (unsigned)begin->ld_type);
   }
   if constexpr (BB_DEBUG_LEVEL > 2) {
     for (auto const& dependent : fetch_packet.instr_depend_on_me) {
       if (dependent.get().ld_type == load_type::BYTECODE) {
-        fmt::print("[IFETCH] dependent of {} is a bytecode load, instr_id of dependent: {}, pc of dependent: {} \n", fetch_packet.instr_id, dependent.get().instr_id, dependent.get().ip);
+        fmt::print("[IFETCH] dependent of {} is a bytecode load, instr_id of dependent: {}, pc of dependent: {} \n", fetch_packet.instr_id,
+                   dependent.get().instr_id, dependent.get().ip);
       }
     }
   }
@@ -444,7 +598,8 @@ long O3_CPU::decode_instruction()
     if (db_entry.branch_mispredicted) {
       // These branches detect the misprediction at decode
       if ((db_entry.branch_type == BRANCH_DIRECT_JUMP) || (db_entry.branch_type == BRANCH_DIRECT_CALL)
-          || (((db_entry.branch_type == BRANCH_CONDITIONAL) || (db_entry.branch_type == BRANCH_OTHER)) && db_entry.branch_taken == db_entry.branch_prediction)) {
+          || (((db_entry.branch_type == BRANCH_CONDITIONAL) || (db_entry.branch_type == BRANCH_OTHER))
+              && db_entry.branch_taken == db_entry.branch_prediction)) {
         // clear the branch_mispredicted bit so we don't attempt to resume fetch again at execute
         db_entry.branch_mispredicted = 0;
         // pay misprediction penalty
@@ -544,7 +699,7 @@ void O3_CPU::do_execution(ooo_model_instr& rob_entry)
 
   if (rob_entry.ip == predictedDispatch.predicted && rob_entry.instr_id > predictedDispatch.instr_id) {
     uint64_t length = rob_entry.instr_id - predictedDispatch.instr_id;
-    sim_stats.lengthBetweenPredictionAndJump[length/5]++;
+    sim_stats.lengthBetweenPredictionAndJump[length / 5]++;
     sim_stats.numberOfPredicitons++;
     predictedDispatch.predicted = 0;
     would_be_skipped_instrs.clear();
@@ -571,7 +726,7 @@ void O3_CPU::do_memory_scheduling(ooo_model_instr& instr)
   for (auto& smem : instr.source_memory) {
     auto q_entry = std::find_if_not(std::begin(LQ), std::end(LQ), [](const auto& lq_entry) { return lq_entry.has_value(); });
     assert(q_entry != std::end(LQ));
-    q_entry->emplace(instr.instr_id, smem, instr.ip, instr.asid, (LOAD_TYPE) instr.ld_type); // add it to the load queue
+    q_entry->emplace(instr.instr_id, smem, instr.ip, instr.asid, (LOAD_TYPE)instr.ld_type); // add it to the load queue
 
     // Check for forwarding
     auto sq_it = std::max_element(std::begin(SQ), std::end(SQ), [smem](const auto& lhs, const auto& rhs) {
@@ -804,7 +959,9 @@ void O3_CPU::print_deadlock()
   fmt::print("DEADLOCK! CPU {} cycle {}\n", cpu, current_cycle);
 
   auto instr_pack = [](const auto& entry) {
-    return std::tuple{entry.instr_id, +entry.fetched, +entry.scheduled, +entry.executed, +entry.num_reg_dependent, entry.num_mem_ops() - entry.completed_mem_ops, entry.event_cycle};
+    return std::tuple{entry.instr_id,   +entry.fetched,           +entry.scheduled,
+                      +entry.executed,  +entry.num_reg_dependent, entry.num_mem_ops() - entry.completed_mem_ops,
+                      entry.event_cycle};
   };
   std::string_view instr_fmt{"instr_id: {} fetched: {} scheduled: {} executed: {} num_reg_dependent: {} num_mem_ops: {} event: {}"};
   champsim::range_print_deadlock(IFETCH_BUFFER, "cpu" + std::to_string(cpu) + "_IFETCH", instr_fmt, instr_pack);
@@ -825,7 +982,7 @@ void O3_CPU::print_deadlock()
   auto sq_pack = [](const auto& entry) {
     std::vector<uint64_t> depend_ids;
     std::transform(std::begin(entry.lq_depend_on_me), std::end(entry.lq_depend_on_me), std::back_inserter(depend_ids),
-        [](const std::optional<LSQ_ENTRY>& lq_entry) { return lq_entry->producer_id; });
+                   [](const std::optional<LSQ_ENTRY>& lq_entry) { return lq_entry->producer_id; });
     return std::tuple{entry.instr_id, entry.virtual_address, entry.fetch_issued, entry.event_cycle, depend_ids};
   };
   std::string_view sq_fmt{"instr_id: {} address: {:#x} fetch_issued: {} event_cycle: {} LQ waiting: {}"};
