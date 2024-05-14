@@ -52,6 +52,13 @@ void BYTECODE_BUFFER::fetching(uint64_t baseAddr, uint64_t currentCycle) {
     fmt::print(stderr, "[BYTECODE BUFFER] Found no vitim {} \n", baseAddr);
 }
 
+bool BYTECODE_BUFFER::currentlyFetching(uint64_t baseAddr) {
+    for (BB_ENTRY const &entry : buffers) {
+        if (entry.currentlyFetching(baseAddr)) return true;
+    }
+    return false;
+}
+
 void BYTECODE_BUFFER::updateBufferEntry(uint64_t baseAddr, uint64_t currentCycle) {
     if (hit(baseAddr)) {
         stats.duplicated_prefetches++;
@@ -83,11 +90,11 @@ void BYTECODE_BUFFER::updateBufferEntry(uint64_t baseAddr, uint64_t currentCycle
     
     
     if (hit(baseAddr)){
-        fmt::print(stderr, "[BYTECODE BUFFER] Uncorrectly updating in BB with hit: {}, cycle: {} \n", baseAddr, currentCycle);
+        fmt::print(stderr, "[BYTECODE BUFFER] Uncorrectly updating in BB with hit: {:x}, cycle: {} \n", baseAddr, currentCycle);
         printInterestingThings();
         return;   
     }
-    fmt::print(stderr, "[BYTECODE BUFFER] Uncorrectly updating in BB with no hit: {}, cycle: {} \n", baseAddr, currentCycle);
+    fmt::print(stderr, "[BYTECODE BUFFER] Uncorrectly updating in BB with no hit: {:x}, cycle: {} \n", baseAddr, currentCycle);
     printInterestingThings();
 }
 
@@ -124,7 +131,7 @@ BB_ENTRY* BYTECODE_BUFFER::find_victim() {
 
 void BYTECODE_BUFFER::printInterestingThings() {
     for (BB_ENTRY const &entry : buffers) {
-        fmt::print(stderr, "[{}] Times changed out {}, hits: {}, times reset: {}, lru: {}, fetching: {}, valid: {}, currentAddr: {}, currentMaxAddr: {}, fetching_base: {}, fetching_max: {}, fetching_cycle: {} \n", entry.index, entry.hits, entry.timesSwitchedOut, entry.timesReset, entry.lru, entry.fetching, entry.valid, entry.baseAddr, entry.maxAddr, entry.fetching_base_addr, entry.fetching_max_addr, entry.fetchingEventCycle);
+        fmt::print(stderr, "[{}] Times changed out {}, hits: {}, times reset: {}, lru: {}, fetching: {}, valid: {}, currentAddr: {:x}, currentMaxAddr: {:x}, fetching_base: {:x}, fetching_max: {:x}, fetching_cycle: {} \n", entry.index, entry.hits, entry.timesSwitchedOut, entry.timesReset, entry.lru, entry.fetching, entry.valid, entry.baseAddr, entry.maxAddr, entry.fetching_base_addr, entry.fetching_max_addr, entry.fetchingEventCycle);
     }
 }
 

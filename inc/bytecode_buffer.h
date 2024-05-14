@@ -113,7 +113,7 @@ class BYTECODE_BUFFER {
     bool hitInBB(uint64_t sourceMemoryAddr);
     bool shouldFetch(uint64_t sourceMemoryAddr);
     void updateBufferEntry(uint64_t baseAddr, uint64_t currentCycle);
+    bool currentlyFetching(uint64_t baseAddr);
 };
-
 
 #endif

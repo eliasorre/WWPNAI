@@ -115,12 +115,13 @@ void champsim::plain_printer::print(O3_CPU::stats_type stats)
     fmt::print(stream, "Bytecode jump predicitons, correct: {} wrong {}, not found skip target: {}, stopped early: {} \n", stats.correctBytecodeJumpPredictions, stats.wrongBytecodeJumpPredictions, stats.notFoundSkipTarget, stats.stopppedEarly);
     
     fmt::print(stream, "HIT AND MISSES PCs:\n");
-    double totalMissesPCs = 1;
+    double totalMissesPCs = 0;
     for (auto const &entry : stats.hitsAndMissesAtPC) {
       totalMissesPCs += entry.second.first;
     }
+    if (totalMissesPCs == 0) totalMissesPCs = 1;
     for (auto const &entry : stats.hitsAndMissesAtPC) {
-      fmt::print(stream, " \t [pc: {:x}, h: {}, m: {}, of total misses: {}% \n]", entry.first, entry.second.second, entry.second.first, static_cast<double>(entry.second.second)/totalMissesPCs);
+      fmt::print(stream, " \t [pc: {:x}, h: {}, m: {}, of total misses: {}% \n]", entry.first, entry.second.second, entry.second.first, static_cast<double>(entry.second.first) * 100/totalMissesPCs);
     }
     fmt::print("\n");
 
