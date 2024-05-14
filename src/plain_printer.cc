@@ -50,85 +50,87 @@ void champsim::plain_printer::print(O3_CPU::stats_type stats)
   for (auto [str, idx] : types)
     fmt::print(stream, "{}: {:.3}\n", str, mpkis[idx]);
   fmt::print(stream, "Seen bytecodes: {}\n", stats.bytecodes_seen);
-  fmt::print(stream, "Average bytecode length (ins): {}\n", stats.avgInstrPrBytecode());
-  fmt::print(stream, "Average bytecode length buckets (#ins, #freq): \n");
-  for (auto const bytecodeLength : stats.bytecode_lengths) {
-   fmt::print(stream, " [{} , {}]", bytecodeLength.first * 10, bytecodeLength.second);
-  }
-  fmt::print(stream, "\n");
+  fmt::print(stream, "Skipped instrs: {}\n", stats.skipped_instrs);
 
-  fmt::print(stream, "Length before dispatch:"); 
-  for (auto const lengths : stats.lengthBetweenBytecodeAndTable) {
-    fmt::print(stream, " [l: {}, f: {}]", lengths.first * 5, lengths.second);
-  }
-  fmt::print(stream, "\n");
+  // fmt::print(stream, "Average bytecode length (ins): {}\n", stats.avgInstrPrBytecode());
+  // fmt::print(stream, "Average bytecode length buckets (#ins, #freq): \n");
+  // for (auto const bytecodeLength : stats.bytecode_lengths) {
+  //  fmt::print(stream, " [{} , {}]", bytecodeLength.first * 10, bytecodeLength.second);
+  // }
+  // fmt::print(stream, "\n");
 
-  fmt::print(stream, "Lengths before jump after prediction:");
-  for (auto const lengths : stats.lengthBetweenPredictionAndJump) {
-    fmt::print(stream, " [l: {}, f: {}]", lengths.first * 5, lengths.second);
-  }
-  fmt::print(stream, "\n");
+  // fmt::print(stream, "Length before dispatch:"); 
+  // for (auto const lengths : stats.lengthBetweenBytecodeAndTable) {
+  //   fmt::print(stream, " [l: {}, f: {}]", lengths.first * 5, lengths.second);
+  // }
+  // fmt::print(stream, "\n");
 
-  if constexpr (SKIP_DISPATCH) {
-    fmt::print(stream, "Unclear bytecodeLoads IPs: ");
-    for (auto const ip : stats.unclearBytecodeLoads) {
-      fmt::print(stream, " ip: {} ", ip);
-    }
-    fmt::print(stream, "\n");
+  // fmt::print(stream, "Lengths before jump after prediction:");
+  // for (auto const lengths : stats.lengthBetweenPredictionAndJump) {
+  //   fmt::print(stream, " [l: {}, f: {}]", lengths.first * 5, lengths.second);
+  // }
+  // fmt::print(stream, "\n");
 
-    fmt::print(stream, "Clear IPs: \n");
-    for (auto const ip : stats.clearBytecodeLoads) {
-      fmt::print(stream, " ip: {} ", ip);
-    }
-    fmt::print(stream, "\n");
+  // if constexpr (SKIP_DISPATCH) {
+  //   fmt::print(stream, "Unclear bytecodeLoads IPs: ");
+  //   for (auto const ip : stats.unclearBytecodeLoads) {
+  //     fmt::print(stream, " ip: {} ", ip);
+  //   }
+  //   fmt::print(stream, "\n");
 
-    fmt::print(stream, "Bytecodes of unclear IPs: \n");
-    for (auto const bytecode : stats.unclearBytecodes) {
-      fmt::print(stream, " bytecode: {} times: {}", getOpcodeName(bytecode.first), bytecode.second);
-    }
-    fmt::print(stream, "\n");
+  //   fmt::print(stream, "Clear IPs: \n");
+  //   for (auto const ip : stats.clearBytecodeLoads) {
+  //     fmt::print(stream, " ip: {} ", ip);
+  //   }
+  //   fmt::print(stream, "\n");
 
-    fmt::print(stream, "Bytecodes clear: \n");
-    for (auto const bytecode : stats.clearBytecodes) {
-      fmt::print(stream, " bytecode: {} times: {} ", getOpcodeName(bytecode.first), bytecode.second);
-    }
-    fmt::print(stream, "\n");
+  //   fmt::print(stream, "Bytecodes of unclear IPs: \n");
+  //   for (auto const bytecode : stats.unclearBytecodes) {
+  //     fmt::print(stream, " bytecode: {} times: {}", getOpcodeName(bytecode.first), bytecode.second);
+  //   }
+  //   fmt::print(stream, "\n");
 
-    fmt::print(stream, "BYTECODE BUFFER stats, hits: {} miss: {}, percentage hits: {}, average miss cycles: {}, prefetches: {}, inflight misses: {}, duplicated_prefetches: {}, aggressive prefetches: {} \n", stats.bb_stats.hits, stats.bb_stats.miss, (100 * stats.bb_stats.hits) / (stats.bb_stats.hits + stats.bb_stats.miss), stats.bb_stats.averageWaitTime(), stats.bb_stats.prefetches, stats.bb_stats.inflightMisses, stats.bb_stats.duplicated_prefetches, stats.bb_stats.aggressive_prefetches);
+  //   fmt::print(stream, "Bytecodes clear: \n");
+  //   for (auto const bytecode : stats.clearBytecodes) {
+  //     fmt::print(stream, " bytecode: {} times: {} ", getOpcodeName(bytecode.first), bytecode.second);
+  //   }
+  //   fmt::print(stream, "\n");
 
-    fmt::print(stream, "BYTECODE BUFFER ENTRIES:\n");
-    for (auto const &entry : stats.bb_stats.entryStats) {
-          fmt::print(stream, "\t [{}] hits: {}, # switched: {}, # switched with no hits: {}, # resets: {} \n", entry.index, entry.hits, entry.timesSwitchedOut, entry.switched_with_no_hits, entry.timesReset);
-    }
+  //   fmt::print(stream, "BYTECODE BUFFER stats, hits: {} miss: {}, percentage hits: {}, average miss cycles: {}, prefetches: {}, inflight misses: {}, duplicated_prefetches: {}, aggressive prefetches: {} \n", stats.bb_stats.hits, stats.bb_stats.miss, (100 * stats.bb_stats.hits) / (stats.bb_stats.hits + stats.bb_stats.miss), stats.bb_stats.averageWaitTime(), stats.bb_stats.prefetches, stats.bb_stats.inflightMisses, stats.bb_stats.duplicated_prefetches, stats.bb_stats.aggressive_prefetches);
 
-    fmt::print(stream, "BYTECODE BTB - strong: {}, weak: {}, wrong: {} \n", stats.bb_mod.strongly_correct, stats.bb_mod.weakly_correct, stats.bb_mod.wrong);
+  //   fmt::print(stream, "BYTECODE BUFFER ENTRIES:\n");
+  //   for (auto const &entry : stats.bb_stats.entryStats) {
+  //         fmt::print(stream, "\t [{}] hits: {}, # switched: {}, # switched with no hits: {}, # resets: {} \n", entry.index, entry.hits, entry.timesSwitchedOut, entry.switched_with_no_hits, entry.timesReset);
+  //   }
 
-    fmt::print(stream, "Bytecode jump predicitons, correct: {} wrong {}, not found skip target: {}, stopped early: {} \n", stats.correctBytecodeJumpPredictions, stats.wrongBytecodeJumpPredictions, stats.notFoundSkipTarget, stats.stopppedEarly);
+  //   fmt::print(stream, "BYTECODE BTB - strong: {}, weak: {}, wrong: {} \n", stats.bb_mod.strongly_correct, stats.bb_mod.weakly_correct, stats.bb_mod.wrong);
+
+  //   fmt::print(stream, "Bytecode jump predicitons, correct: {} wrong {}, not found skip target: {}, stopped early: {} \n", stats.correctBytecodeJumpPredictions, stats.wrongBytecodeJumpPredictions, stats.notFoundSkipTarget, stats.stopppedEarly);
     
-    fmt::print(stream, "HIT AND MISSES PCs:\n");
-    for (auto const &entry : stats.hitsAndMissesAtPC) {
-      fmt::print(stream, " \t [pc: {:x}, h: {}, m: {} \n]", entry.first, entry.second.second, entry.second.first);
-    }
-    fmt::print("\n");
+  //   fmt::print(stream, "HIT AND MISSES PCs:\n");
+  //   for (auto const &entry : stats.hitsAndMissesAtPC) {
+  //     fmt::print(stream, " \t [pc: {:x}, h: {}, m: {} \n]", entry.first, entry.second.second, entry.second.first);
+  //   }
+  //   fmt::print("\n");
 
-    fmt::print(stream, "STOPPED EARLY PCs:\n");
-    for (auto const &entry : stats.StoppedEarlyPCs) {
-      fmt::print(stream, "   [pc: {:x}, f: {}]", entry.first, entry.second);
-    }
-    fmt::print("\n");
+  //   fmt::print(stream, "STOPPED EARLY PCs:\n");
+  //   for (auto const &entry : stats.StoppedEarlyPCs) {
+  //     fmt::print(stream, "   [pc: {:x}, f: {}]", entry.first, entry.second);
+  //   }
+  //   fmt::print("\n");
 
-    fmt::print(stream, "NOT FOUND SKIP PCs:\n");
-    for (auto const &entry : stats.notFoundSkipPCs) {
-      fmt::print(stream, "   [pc: {:x}, f: {}]", entry.first, entry.second);
-    }
-    fmt::print("\n");
+  //   fmt::print(stream, "NOT FOUND SKIP PCs:\n");
+  //   for (auto const &entry : stats.notFoundSkipPCs) {
+  //     fmt::print(stream, "   [pc: {:x}, f: {}]", entry.first, entry.second);
+  //   }
+  //   fmt::print("\n");
 
-    fmt::print(stream, "FOUND SKIP PCs:\n");
-    for (auto const &entry : stats.foundSkipPCs) {
-      fmt::print(stream, "   [pc: {:x}, f: {}]", entry.first, entry.second);
-    }
-    fmt::print("\n");
-  }
+  //   fmt::print(stream, "FOUND SKIP PCs:\n");
+  //   for (auto const &entry : stats.foundSkipPCs) {
+  //     fmt::print(stream, "   [pc: {:x}, f: {}]", entry.first, entry.second);
+  //   }
+  //   fmt::print("\n");
+  // }
 
 }
 

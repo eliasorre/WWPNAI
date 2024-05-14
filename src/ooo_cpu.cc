@@ -117,8 +117,10 @@ void O3_CPU::initialize_instruction()
 
   while (current_cycle >= fetch_resume_cycle && instrs_to_read_this_cycle > 0 && !std::empty(input_queue)) {
     instrs_to_read_this_cycle--;
-    if (input_queue.front().ld_type == load_type::INITIAL_POINT || input_queue.front().ld_type == load_type::BYTECODE) {
-      reorder_queues();
+    if constexpr (champsim::SKIP_DISPATCH) {
+      if (input_queue.front().ld_type == load_type::INITIAL_POINT || input_queue.front().ld_type == load_type::BYTECODE) {
+        reorder_queues();
+      }
     }
 
     ooo_model_instr queue_front = input_queue.front();
@@ -204,26 +206,6 @@ ooo_model_instr* O3_CPU::find_skip_target(const ooo_model_instr& queue_front)
   for (const ooo_model_instr& instr : input_queue) {
     instr_iterated++;
     ips.push_back({instr.ip, instr.ld_type});
-    if (instr.ld_type == load_type::BYTECODE && instr.instr_id != queue_front.instr_id) {
-      sim_stats.stopppedEarly++;
-      sim_stats.StoppedEarlyPCs[queue_front.ip]++;
-      return nullptr;
-    }
-    if (instr.ld_type == load_type::DISPATCH_TABLE) {
-      predicted_ip = instr.load_val;
-    }
-    if (instr.ld_type == load_type::COMBINED_JUMP) {
-      predicted_ip = instr.branch_target;
-    }
-    if (instr.ld_type == load_type::NOT_SKIP && weirdNonSkips.find(instr.ip) == weirdNonSkips.end()) {
-      weirdNonSkips.insert(instr.ip);
-      fmt::print(stderr, "[{}] Skipping non-skippable instr, front {:x} curr_instr {:x} iterated {} predicted_ip: {:x} \n", queue_front.instr_id, queue_front.ip - knownBase, instr.ip - knownBase, instr_iterated, predicted_ip - knownBase);
-      int i = 0;
-      for (auto const& ip : ips) {
-        fmt::print(stderr, "\t[{}] {:x} {}  \n", i++, ip.first - knownBase, ip.second);
-      }
-    }
-
     if (instr.ip == predicted_ip) {
       if (last_ld_type != load_type::JUMP_POINT && last_ld_type != load_type::COMBINED_JUMP) {
         if (weirdBytecodeLoads.find(queue_front.ip) == weirdBytecodeLoads.end()) {
@@ -234,15 +216,14 @@ ooo_model_instr* O3_CPU::find_skip_target(const ooo_model_instr& queue_front)
       sim_stats.foundSkipPCs[queue_front.ip]++;
       return const_cast<ooo_model_instr*>(&instr);
     }
-
-    last_ld_type = instr.ld_type;
-  }
-  for (const ooo_model_instr& instr : trace_queue) {
-    instr_iterated++;
-    ips.push_back({instr.ip, instr.ld_type});
-    if (instr.ld_type == load_type::BYTECODE) {
+    
+    if (instr.ld_type == load_type::BYTECODE && instr.instr_id != queue_front.instr_id) {
       sim_stats.stopppedEarly++;
       sim_stats.StoppedEarlyPCs[queue_front.ip]++;
+      int i = 0;
+      for (auto const& ip : ips) {
+        fmt::print(stderr, "\t[{}] stopped early {:x} {}  \n", i++, ip.first - knownBase, ip.second);
+      }
       return nullptr;
     }
     if (instr.ld_type == load_type::DISPATCH_TABLE) {
@@ -260,6 +241,12 @@ ooo_model_instr* O3_CPU::find_skip_target(const ooo_model_instr& queue_front)
       }
     }
 
+    last_ld_type = instr.ld_type;
+  }
+  for (const ooo_model_instr& instr : trace_queue) {
+    instr_iterated++;
+    ips.push_back({instr.ip, instr.ld_type});
+    
     if (instr.ip == predicted_ip) {
       if (last_ld_type != load_type::JUMP_POINT && last_ld_type != load_type::COMBINED_JUMP) {
         if (weirdBytecodeLoads.find(queue_front.ip) == weirdBytecodeLoads.end()) {
@@ -270,6 +257,31 @@ ooo_model_instr* O3_CPU::find_skip_target(const ooo_model_instr& queue_front)
       sim_stats.foundSkipPCs[queue_front.ip]++;
       return const_cast<ooo_model_instr*>(&instr);
     }
+    
+    if (instr.ld_type == load_type::BYTECODE && instr.instr_id != queue_front.instr_id) {
+      sim_stats.stopppedEarly++;
+      sim_stats.StoppedEarlyPCs[queue_front.ip]++;
+      int i = 0;
+      for (auto const& ip : ips) {
+        fmt::print(stderr, "\t[{}] stopped early {:x} {}  \n", i++, ip.first - knownBase, ip.second);
+      }
+      return nullptr;
+    }
+    if (instr.ld_type == load_type::DISPATCH_TABLE) {
+      predicted_ip = instr.load_val;
+    }
+    if (instr.ld_type == load_type::COMBINED_JUMP) {
+      predicted_ip = instr.branch_target;
+    }
+    if (instr.ld_type == load_type::NOT_SKIP && weirdNonSkips.find(instr.ip) == weirdNonSkips.end()) {
+      weirdNonSkips.insert(instr.ip);
+      fmt::print(stderr, "[{}] Skipping non-skippable instr, front {:x} curr_instr {:x} iterated {} predicted_ip: {:x} \n", queue_front.instr_id, queue_front.ip - knownBase, instr.ip - knownBase, instr_iterated, predicted_ip - knownBase);
+      int i = 0;
+      for (auto const& ip : ips) {
+        fmt::print(stderr, "\t[{}] {:x} {}  \n", i++, ip.first - knownBase, ip.second);
+      }
+    }
+
     last_ld_type = instr.ld_type;
   }
   // fmt::print(stderr, "Not found skip target queue ip: {:x}, instructions looked at: {}, predicted ip: {} \n", queue_front.ip, instr_iterated, predicted_ip);
@@ -285,7 +297,6 @@ void O3_CPU::reorder_queues()
   std::deque<ooo_model_instr> non_skip_instrs, dispatch_instrs;
   bool reorder_needed = false, reached_end = false;
   auto instrId_front = input_queue.front().instr_id;
-  fmt::print(stderr, "reordering at {} \n", instrId_front);
   std::deque<uint64_t> instrIps;
   for (auto const& instr : input_queue) {
     if (instr.instr_id == instrId_front)
@@ -320,7 +331,6 @@ void O3_CPU::reorder_queues()
     int poped_elems = 0;
     while (reorder_needed) {
       ooo_model_instr instr = input_queue.empty() ? trace_queue.front() : input_queue.front();
-      fmt::print(stderr, "popped {:x} size input queue {} size trace queue {}\n", instr.ip - knownBase, input_queue.size(), trace_queue.size());
       instrIps.push_back(instr.ip);
       if (instr.ld_type == load_type::NOT_SKIP) {
         non_skip_instrs.push_back(instr);
@@ -338,10 +348,8 @@ void O3_CPU::reorder_queues()
 
     while (!dispatch_instrs.empty()) {
       if (poped_elems > static_cast<int>(size_input_queue)) {
-        fmt::print(stderr, "pushing dispatch {:x} to trace queue at {} popped {} size {} \n", dispatch_instrs.back().ip - knownBase, dispatch_instrs.back().instr_id, poped_elems, size_input_queue);
         trace_queue.push_front(dispatch_instrs.back());
       } else {
-        fmt::print(stderr, "pushing dispatch {:x} to input queue at {} popped {} size {} \n", dispatch_instrs.back().ip - knownBase, dispatch_instrs.back().instr_id, poped_elems, size_input_queue);
         input_queue.push_front(dispatch_instrs.back());
       }
       poped_elems--;
@@ -350,10 +358,8 @@ void O3_CPU::reorder_queues()
 
     while (!non_skip_instrs.empty()) {
       if (poped_elems > static_cast<int>(size_input_queue)) {
-        fmt::print(stderr, "pushing non skip {:x} to trace queue at {} popped {} size {} \n", non_skip_instrs.back().ip - knownBase, non_skip_instrs.back().instr_id, poped_elems, size_input_queue);
         trace_queue.push_front(non_skip_instrs.back());
       } else {
-        fmt::print(stderr, "pushing non skip {:x} to input queue at {} popped {}  size {}\n", non_skip_instrs.back().ip - knownBase, non_skip_instrs.back().instr_id, poped_elems, size_input_queue);
         input_queue.push_front(non_skip_instrs.back());
       }
       poped_elems--;
@@ -384,6 +390,8 @@ void O3_CPU::reorder_queues()
 void O3_CPU::skip_forward(ooo_model_instr const& target_instr)
 {
   while (input_queue.front().instr_id < target_instr.instr_id && !trace_queue.empty()) {
+    sim_stats.skipped_instrs++;
+    num_retired++;
     input_queue.pop_front();
     if (!trace_queue.empty()) {
       input_queue.push_back(trace_queue.front());
