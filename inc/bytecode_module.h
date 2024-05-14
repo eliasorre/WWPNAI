@@ -16,6 +16,7 @@
 #include "deadlock.h"
 #include "instruction.h"
 #include "bytecode_buffer.h"
+#include "bytecode_hdbt.h"
 #include "util/span.h"
 #include <fmt/chrono.h>
 #include <fmt/core.h>
@@ -46,6 +47,7 @@ class BYTECODE_MODULE {
     public: 
         BYTECODE_BUFFER bb_buffer;
         BYTCODE_MODULE_STATS stats;
+        BYTECODE_HDBT hdbt;
         void printBTBs();
 
         void initialize(uint32_t cpu);

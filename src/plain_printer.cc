@@ -103,13 +103,24 @@ void champsim::plain_printer::print(O3_CPU::stats_type stats)
           fmt::print(stream, "\t [{}] hits: {}, # switched: {}, # switched with no hits: {}, # resets: {} \n", entry.index, entry.hits, entry.timesSwitchedOut, entry.switched_with_no_hits, entry.timesReset);
     }
 
+    fmt::print(stream, "BYTECODE HDBT stats, hits: {} miss: {}, percentage hits: {} \n", stats.hdbt_stats.hits, stats.hdbt_stats.miss, (100 * stats.hdbt_stats.hits) / (stats.hdbt_stats.hits + stats.hdbt_stats.miss));
+
+    fmt::print(stream, "BYTECODE HDBT ENTRIES:\n");
+    for (auto const &entry : stats.hdbt_stats.entryStats) {
+          fmt::print(stream, "\t [{}] hits: {}, # switched: {}, # miss: {} \n", entry.opcode, entry.hits, entry.timesSwitchedOut, entry.miss);
+    }
+
     fmt::print(stream, "BYTECODE BTB - strong: {}, weak: {}, wrong: {} \n", stats.bb_mod.strongly_correct, stats.bb_mod.weakly_correct, stats.bb_mod.wrong);
 
     fmt::print(stream, "Bytecode jump predicitons, correct: {} wrong {}, not found skip target: {}, stopped early: {} \n", stats.correctBytecodeJumpPredictions, stats.wrongBytecodeJumpPredictions, stats.notFoundSkipTarget, stats.stopppedEarly);
     
     fmt::print(stream, "HIT AND MISSES PCs:\n");
+    double totalMissesPCs = 1;
     for (auto const &entry : stats.hitsAndMissesAtPC) {
-      fmt::print(stream, " \t [pc: {:x}, h: {}, m: {} \n]", entry.first, entry.second.second, entry.second.first);
+      totalMissesPCs += entry.second.first;
+    }
+    for (auto const &entry : stats.hitsAndMissesAtPC) {
+      fmt::print(stream, " \t [pc: {:x}, h: {}, m: {}, of total misses: {}% \n]", entry.first, entry.second.second, entry.second.first, static_cast<double>(entry.second.second)/totalMissesPCs);
     }
     fmt::print("\n");
 

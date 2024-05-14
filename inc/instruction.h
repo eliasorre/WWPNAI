@@ -61,6 +61,7 @@ constexpr bool has_load_size_v<T, std::void_t<decltype(std::declval<T>().load_si
 struct ooo_model_instr {
   uint64_t instr_id = 0;
   uint64_t ip = 0;
+  uint64_t og_ip = 0;
   uint64_t event_cycle = 0;
 
   bool is_branch = 0;
