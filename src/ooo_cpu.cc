@@ -119,7 +119,7 @@ void O3_CPU::initialize_instruction()
 
   while (current_cycle >= fetch_resume_cycle && instrs_to_read_this_cycle > 0 && !std::empty(input_queue)) {
     instrs_to_read_this_cycle--;
-    if constexpr (champsim::SKIP_DISPATCH) {
+    if constexpr (champsim::skip_dispatch) {
       if (input_queue.front().ld_type == load_type::INITIAL_POINT || input_queue.front().ld_type == load_type::BYTECODE) {
         reorder_queues();
       }
@@ -128,12 +128,13 @@ void O3_CPU::initialize_instruction()
     ooo_model_instr queue_front = input_queue.front();
     auto stop_fetch = do_init_instruction(queue_front);
 
-    if constexpr (champsim::SKIP_DISPATCH) {
+    if constexpr (champsim::skip_dispatch) {
       // Add to IFETCH_BUFFER
       if (queue_front.ld_type != load_type::BYTECODE) {
         IFETCH_BUFFER.push_back(queue_front);
         input_queue.pop_front();
       } else {
+        sim_stats.bytecodes_seen++;
         uint64_t bytecode_pc = queue_front.source_memory.front();
         uint64_t fetch_pc = 0;
         int instr_opcode = queue_front.load_val & 0xFF;
@@ -197,7 +198,7 @@ void O3_CPU::initialize_instruction()
       }
     }
 
-    if constexpr (!champsim::SKIP_DISPATCH) {
+    if constexpr (!champsim::skip_dispatch) {
       IFETCH_BUFFER.push_back(queue_front);
       input_queue.pop_front();
     }
@@ -343,7 +344,6 @@ void O3_CPU::reorder_queues()
   if (reorder_needed) {
     auto const size_input_queue = input_queue.size();
     auto const total_queue_size = input_queue.size() + trace_queue.size();
-    uint64_t const knownBase = 0x58b3752e7000;
     int poped_elems = 0;
     while (reorder_needed) {
       ooo_model_instr instr = input_queue.empty() ? trace_queue.front() : input_queue.front();
@@ -474,7 +474,7 @@ bool O3_CPU::do_predict_branch(ooo_model_instr& arch_instr)
         fetch_resume_cycle = std::numeric_limits<uint64_t>::max();
         stop_fetch = true;
         arch_instr.branch_mispredicted = 1;
-        if (arch_instr.ld_type == load_type::JUMP_POINT) {
+        if (arch_instr.ld_type == load_type::JUMP_POINT || arch_instr.ld_type == load_type::COMBINED_JUMP) {
           sim_stats.wrongBytecodeJumpPredictions++;
         }
       }
@@ -520,7 +520,7 @@ void O3_CPU::do_check_dib(ooo_model_instr& instr)
     // The cache line is in the L0, so we can mark this as complete
     instr.fetched = COMPLETED;
 
-    if constexpr (champsim::SKIP_DISPATCH) {
+    if constexpr (champsim::skip_dispatch) {
       // return result of fetching bytecode instructions to the Bytecode buffer
       if (instr.ld_type == load_type::BYTECODE) {
         bytecode_module.bb_buffer.updateBufferEntry(instr.ip, this->current_cycle);
@@ -871,10 +871,6 @@ bool O3_CPU::execute_load(const LSQ_ENTRY& lq_entry)
     fmt::print("[LQ] {} instr_id: {} vaddr: {:#x}\n", __func__, data_packet.instr_id, data_packet.v_address);
   }
 
-  if (lq_entry.ld_type == LOAD_TYPE::BYTECODE) {
-    sim_stats.bytecodes_seen++;
-  }
-
   return L1D_bus.issue_read(data_packet);
 }
 
@@ -922,7 +918,7 @@ long O3_CPU::handle_memory_return()
 
   for (auto l1i_bw = FETCH_WIDTH, to_read = L1I_BANDWIDTH; l1i_bw > 0 && to_read > 0 && !L1I_bus.lower_level->returned.empty(); --to_read) {
     auto& l1i_entry = L1I_bus.lower_level->returned.front();
-    if constexpr (champsim::SKIP_DISPATCH) {
+    if constexpr (champsim::skip_dispatch) {
       if (l1i_bw > 0 && l1i_entry.instr_depend_on_me.empty()) {
         if (bytecode_module.bb_buffer.currentlyFetching(l1i_entry.v_address)) {
           bytecode_module.bb_buffer.updateBufferEntry(l1i_entry.v_address, this->current_cycle);
@@ -942,7 +938,7 @@ long O3_CPU::handle_memory_return()
           fmt::print("[IFETCH] {} instr_id: {} fetch completed\n", __func__, fetched.instr_id);
         }
 
-        if constexpr (champsim::SKIP_DISPATCH) {
+        if constexpr (champsim::skip_dispatch) {
           // return result of fetching bytecode instructions to the Bytecode buffer
           if (fetched.ld_type == load_type::BYTECODE) {
             bytecode_module.bb_buffer.updateBufferEntry(fetched.ip, this->current_cycle);

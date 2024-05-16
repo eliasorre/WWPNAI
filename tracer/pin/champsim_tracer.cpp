@@ -62,6 +62,7 @@ KNOB<std::string> KnobOutputFile(KNOB_MODE_WRITEONCE, "pintool", "o", "champsim.
 KNOB<UINT64> KnobSkipInstructions(KNOB_MODE_WRITEONCE, "pintool", "s", "0", "How many instructions to skip before tracing begins");
 
 KNOB<BOOL> KnobWaitOnPipeSignal(KNOB_MODE_WRITEONCE, "pintool", "p", "false", "Should the tool wait on pipe to write.");
+KNOB<BOOL> KnobThreadSpecific(KNOB_MODE_WRITEONCE, "pintool", "m", "false", "Should the tool differentiate between threads.");
 KNOB<BOOL> KnobUseFileOutput(KNOB_MODE_WRITEONCE, "pintool", "f", "false", "Should the tool write output to file.");
 
 KNOB<UINT64> KnobTraceInstructions(KNOB_MODE_WRITEONCE, "pintool", "t", "1000000", "How many instructions to trace");
@@ -173,12 +174,12 @@ BOOL ShouldWrite()
 
 void WriteCurrentInstruction()
 {
-    if (mainOsThread == 0) {
+    if (KnobThreadSpecific && mainOsThread == 0) {
       std::cout << "OS thread ID: " << PIN_GetTid() << std::endl;
       mainOsThread = PIN_GetTid();
     }
 
-    if (PIN_GetTid() != mainOsThread) {
+    if (KnobThreadSpecific && PIN_GetTid() != mainOsThread) {
       if (OSthreadIDs.find(PIN_GetTid()) == OSthreadIDs.end()) {
         std::ofstream file;
         std::string fileName; 
@@ -209,7 +210,7 @@ void WriteCurrentInstruction()
         return;
     }
 
-    if (PIN_GetTid() != mainOsThread) {
+    if (KnobThreadSpecific && PIN_GetTid() != mainOsThread) {
         if (instrCounts[std::to_string(PIN_GetTid())] < KnobTraceInstructions.Value() + KnobSkipInstructions.Value()) {
           instrCounts[std::to_string(PIN_GetTid())]++;
           if (!outfiles[std::to_string(PIN_GetTid())].is_open()) std::cout << "Failed to open after creation. Check permissions or path.\n";

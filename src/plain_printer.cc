@@ -51,27 +51,9 @@ void champsim::plain_printer::print(O3_CPU::stats_type stats)
     fmt::print(stream, "{}: {:.3}\n", str, mpkis[idx]);
   fmt::print(stream, "Seen bytecodes: {}\n", stats.bytecodes_seen);
   fmt::print(stream, "Skipped instrs: {}\n", stats.skipped_instrs);
+  fmt::print(stream, "Bytecode jump predicitons, correct: {} wrong {}, not found skip target: {}, stopped early: {} \n", stats.correctBytecodeJumpPredictions, stats.wrongBytecodeJumpPredictions, stats.notFoundSkipTarget, stats.stopppedEarly);
 
-  fmt::print(stream, "Average bytecode length (ins): {}\n", stats.avgInstrPrBytecode());
-  fmt::print(stream, "Average bytecode length buckets (#ins, #freq): \n");
-  for (auto const bytecodeLength : stats.bytecode_lengths) {
-   fmt::print(stream, " [{} , {}]", bytecodeLength.first * 10, bytecodeLength.second);
-  }
-  fmt::print(stream, "\n");
-
-  fmt::print(stream, "Length before dispatch:"); 
-  for (auto const lengths : stats.lengthBetweenBytecodeAndTable) {
-    fmt::print(stream, " [l: {}, f: {}]", lengths.first * 5, lengths.second);
-  }
-  fmt::print(stream, "\n");
-
-  fmt::print(stream, "Lengths before jump after prediction:");
-  for (auto const lengths : stats.lengthBetweenPredictionAndJump) {
-    fmt::print(stream, " [l: {}, f: {}]", lengths.first * 5, lengths.second);
-  }
-  fmt::print(stream, "\n");
-
-  if constexpr (SKIP_DISPATCH) {
+  if constexpr (skip_dispatch) {
     fmt::print(stream, "Unclear bytecodeLoads IPs: ");
     for (auto const ip : stats.unclearBytecodeLoads) {
       fmt::print(stream, " ip: {} ", ip);
@@ -96,7 +78,7 @@ void champsim::plain_printer::print(O3_CPU::stats_type stats)
     }
     fmt::print(stream, "\n");
 
-    fmt::print(stream, "BYTECODE BUFFER stats, hits: {} miss: {}, percentage hits: {}, average miss cycles: {}, prefetches: {}, inflight misses: {}, duplicated_prefetches: {}, aggressive prefetches: {} \n", stats.bb_stats.hits, stats.bb_stats.miss, (100 * stats.bb_stats.hits) / (stats.bb_stats.hits + stats.bb_stats.miss), stats.bb_stats.averageWaitTime(), stats.bb_stats.prefetches, stats.bb_stats.inflightMisses, stats.bb_stats.duplicated_prefetches, stats.bb_stats.aggressive_prefetches);
+    fmt::print(stream, "BYTECODE BUFFER stats, hits: {} miss: {}, percentage hits: {}, average miss cycles: {}, prefetches: {}, inflight misses: {}, duplicated_prefetches: {}, aggressive prefetches: {} \n", stats.bb_stats.hits, stats.bb_stats.miss, static_cast<double>(100 * stats.bb_stats.hits) / static_cast<double>(stats.bb_stats.hits + stats.bb_stats.miss), stats.bb_stats.averageWaitTime(), stats.bb_stats.prefetches, stats.bb_stats.inflightMisses, stats.bb_stats.duplicated_prefetches, stats.bb_stats.aggressive_prefetches);
 
     fmt::print(stream, "BYTECODE BUFFER ENTRIES:\n");
     for (auto const &entry : stats.bb_stats.entryStats) {
@@ -111,8 +93,6 @@ void champsim::plain_printer::print(O3_CPU::stats_type stats)
     }
 
     fmt::print(stream, "BYTECODE BTB - strong: {}, weak: {}, wrong: {} \n", stats.bb_mod.strongly_correct, stats.bb_mod.weakly_correct, stats.bb_mod.wrong);
-
-    fmt::print(stream, "Bytecode jump predicitons, correct: {} wrong {}, not found skip target: {}, stopped early: {} \n", stats.correctBytecodeJumpPredictions, stats.wrongBytecodeJumpPredictions, stats.notFoundSkipTarget, stats.stopppedEarly);
     
     fmt::print(stream, "HIT AND MISSES PCs:\n");
     double totalMissesPCs = 0;
@@ -121,7 +101,7 @@ void champsim::plain_printer::print(O3_CPU::stats_type stats)
     }
     if (totalMissesPCs == 0) totalMissesPCs = 1;
     for (auto const &entry : stats.hitsAndMissesAtPC) {
-      fmt::print(stream, " \t [pc: {:x}, h: {}, m: {}, of total misses: {}% \n]", entry.first, entry.second.second, entry.second.first, static_cast<double>(entry.second.first) * 100/totalMissesPCs);
+      fmt::print(stream, " \t [pc: {:x}, h: {}, m: {}, of total misses: {}% \n]", entry.first, entry.second.second, entry.second.first, (static_cast<double>(entry.second.first) * 100)/totalMissesPCs);
     }
     fmt::print("\n");
 

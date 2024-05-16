@@ -101,6 +101,7 @@
         "execution": "cpp",
         "version": "cpp",
         "stacktrace": "cpp",
-        "any": "cpp"
+        "any": "cpp",
+        "stack": "cpp"
     }
 }

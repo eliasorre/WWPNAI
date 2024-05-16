@@ -22,7 +22,7 @@
 #include <fmt/core.h>
 #include <fmt/ranges.h>
 
-
+constexpr std::size_t BYTECODE_BTB_SIZE = 256;
 
 struct BYTCODE_MODULE_STATS {
     uint64_t strongly_correct = 0;

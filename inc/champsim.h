@@ -28,14 +28,20 @@ struct deadlock : public std::exception {
 };
 
 //#define DEBUG_PRINT
+#define SKIP_DISPATCH
 
 #ifdef DEBUG_PRINT
 constexpr bool debug_print = true;
 #else
 constexpr bool debug_print = false;
 #endif
-// activate bytecode module to skip dispatch
-constexpr bool SKIP_DISPATCH = true; 
+
+#ifdef SKIP_DISPATCH
+constexpr bool skip_dispatch = true; 
+#else
+constexpr bool skip_dispatch = false; 
+#endif
+
 } // namespace champsim
 
 #endif

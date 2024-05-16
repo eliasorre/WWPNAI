@@ -23,7 +23,6 @@ namespace
 {
 
 constexpr bool USE_OPARGS = false;
-constexpr std::size_t BYTECODE_BTB_SIZE = 1026;
 constexpr int MAX_USAGE_VAL = 8;
 constexpr std::size_t STARTING_USAGE_VAL = 4;
 constexpr int MAX_CONFIDENCE = 3;

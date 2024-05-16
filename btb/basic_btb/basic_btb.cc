@@ -13,6 +13,7 @@
 
 #include "msl/lru_table.h"
 #include "ooo_cpu.h"
+#include "bytecode_module.h"
 
 namespace
 {
@@ -25,7 +26,13 @@ enum class branch_info {
 
 constexpr std::size_t BTB_SET = 1024;
 constexpr std::size_t BTB_WAY = 8;
-constexpr std::size_t BTB_INDIRECT_SIZE = 4096;
+
+#ifdef SKIP_DISPATCH
+constexpr std::size_t BTB_INDIRECT_SIZE = 4096 - (HDBT_SIZE + BYTECODE_BTB_SIZE);
+#else
+constexpr std::size_t BTB_INDIRECT_SIZE = 4096 ;
+#endif
+
 constexpr std::size_t RAS_SIZE = 64;
 constexpr std::size_t CALL_SIZE_TRACKERS = 1024;
 
