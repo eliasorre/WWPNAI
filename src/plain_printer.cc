@@ -101,8 +101,8 @@ void champsim::plain_printer::print(O3_CPU::stats_type stats)
     fmt::print(stream, "BYTECODE BTB - strong: {}, weak: {}, wrong: {} \n", stats.bb_mod.strongly_correct, stats.bb_mod.weakly_correct, stats.bb_mod.wrong);
     
     fmt::print(stream, "BYTECODE BTB ENTRIES:\n");
-    for (auto const &entry : stats.bb_mod.dbtb_entryStats) {
-          fmt::print(stream, "\t [{}] hits: {}, # miss: {} \n", entry.first, entry.second.hit, entry.second.miss);
+    for (auto const &[opcode, entry_stats] : stats.bb_mod.dbtb_entryStats) {
+          fmt::print(stream, "\t [{}] hits: {}, # miss: {} \n", opcode, entry_stats.hit, entry_stats.miss);
     }
 
     fmt::print(stream, "HIT AND MISSES PCs:\n");

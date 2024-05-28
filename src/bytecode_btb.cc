@@ -38,6 +38,7 @@ struct btb_entry_t {
 
   int usage = STARTING_USAGE_VAL;
   int confidence = STARTING_CONFIDENCE;
+  uint64_t lru = STARTING_BBTB_LRU_VAL;
 
   uint64_t hits{0}, misses{0};
 
@@ -146,6 +147,29 @@ btb_entry_t* createOuterEntry(int opcode)
   return &bytecode_BTB.back();
 }
 
+void updateLRUs() {
+  for (auto &elem : bytecode_BTB) {
+    elem.lru--;
+  }
+}
+
+bool foundVictim()
+{
+  if (bytecode_BTB.size() < BYTECODE_BTB_SIZE) {
+    return true;
+  }
+  if constexpr (BYTECODE_BTB_SIZE == 0)
+    return false;
+  auto victim = bytecode_BTB.front();
+  for (auto& entry : bytecode_BTB) {
+    if (entry.valid && (entry.lru < victim.lru)) {
+      victim = entry;
+    }
+  }
+  bytecode_BTB.erase(std::find_if(bytecode_BTB.begin(), bytecode_BTB.end(), [victim] (btb_entry_t entry) { return entry.opcode == victim.opcode; }));
+  return true;
+}
+
 int64_t BYTECODE_MODULE::btb_prediction(int opcode, int oparg)
 {
   if (findOuterEntry(opcode) == nullptr)
@@ -158,7 +182,10 @@ void BYTECODE_MODULE::update_btb(int opcode, int oparg, int64_t correct_jump)
   auto outerEntry = findOuterEntry(opcode);
   if (outerEntry == nullptr) {
     // No point in creating entries for standard bytecodes
-    if (correct_jump == BYTECODE_SIZE) return;
+    if (correct_jump == BYTECODE_SIZE)
+      return;
+    if (!foundVictim())
+      return;
     outerEntry = createOuterEntry(opcode);
   }
   auto innerEntry = outerEntry->findInnerEntry(oparg);
@@ -171,8 +198,12 @@ void BYTECODE_MODULE::update_btb(int opcode, int oparg, int64_t correct_jump)
       outerEntry->inner_entries.emplace_back(newEntry);
     }
     outerEntry->update(correct_jump);
+    updateLRUs();
+    outerEntry->lru++;
   } else {
     innerEntry->update(correct_jump);
+    updateLRUs();
+    innerEntry->lru++;
   }
 }
 
@@ -202,16 +233,15 @@ void BYTECODE_MODULE::printBTBs()
   fmt::print(stdout, "---------------------------------- \n\n");
 }
 
-void BYTECODE_MODULE::generateDBTBStats() {
-  for (auto const& entryStat : entryStats) {
-    stats.dbtb_entryStats[entryStat.first].hit = entryStat.second.hit;
-    stats.dbtb_entryStats[entryStat.first].miss = entryStat.second.hit;
+void BYTECODE_MODULE::generateDBTBStats()
+{
+  for (auto const& [opcode, btb_stats] : entryStats) {
+    stats.dbtb_entryStats[opcode].hit = btb_stats.hit;
+    stats.dbtb_entryStats[opcode].miss = btb_stats.miss;
   }
 }
 
-void BYTECODE_MODULE::resetDBTBStats() {
-  for (auto& entryStat : entryStats) {
-    entryStat.second.miss = 0;
-    entryStat.second.hit = 0;
-  }
+void BYTECODE_MODULE::resetDBTBStats()
+{
+  entryStats.clear();
 }

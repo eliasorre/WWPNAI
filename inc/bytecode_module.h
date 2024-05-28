@@ -24,6 +24,7 @@
 #include <fmt/ranges.h>
 
 constexpr std::size_t BYTECODE_BTB_SIZE = 256;
+constexpr int STARTING_BBTB_LRU_VAL = 1 << 12;
 
 struct btb_entry_stats {
   uint64_t hit{0}, miss{0};

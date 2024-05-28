@@ -24,7 +24,7 @@
 #include "operable.h"
 #include <type_traits>
 
-constexpr std::size_t HDBT_SIZE = 256;
+constexpr std::size_t HDBT_SIZE = 128;
 constexpr int STARTING_HDBT_LRU_VAL = 1 << 12;
 
 struct HDBT_ENTRY_STATS {
