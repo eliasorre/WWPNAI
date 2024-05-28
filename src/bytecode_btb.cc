@@ -26,6 +26,8 @@ constexpr std::size_t STARTING_USAGE_VAL = 4;
 constexpr int MAX_CONFIDENCE = 3;
 constexpr int STARTING_CONFIDENCE = 3;
 
+std::map<int, btb_entry_stats> entryStats = {};
+
 struct btb_entry_t {
   int opcode = 0;
   int oparg = 0;
@@ -61,6 +63,7 @@ struct btb_entry_t {
     if (usage < MAX_USAGE_VAL)
       usage++;
     hits++;
+    entryStats[opcode].hit++;
   }
 
   void wrongPrediction(int64_t correctTarget)
@@ -76,6 +79,7 @@ struct btb_entry_t {
     else
       valid = false;
     misses++;
+    entryStats[opcode].miss++;
   }
 
   btb_entry_t* findInnerEntry(int oparg)
@@ -196,4 +200,18 @@ void BYTECODE_MODULE::printBTBs()
     fmt::print(stdout, "\n");
   }
   fmt::print(stdout, "---------------------------------- \n\n");
+}
+
+void BYTECODE_MODULE::generateDBTBStats() {
+  for (auto const& entryStat : entryStats) {
+    stats.dbtb_entryStats[entryStat.first].hit = entryStat.second.hit;
+    stats.dbtb_entryStats[entryStat.first].miss = entryStat.second.hit;
+  }
+}
+
+void BYTECODE_MODULE::resetDBTBStats() {
+  for (auto& entryStat : entryStats) {
+    entryStat.second.miss = 0;
+    entryStat.second.hit = 0;
+  }
 }

@@ -34,3 +34,16 @@ void BYTECODE_MODULE::updateBranching(uint64_t correct_target)
 
     update_btb(last_branch_opcode, last_branch_oparg, correct_target - last_bpc);
 }
+
+void BYTECODE_MODULE::generateStats() {
+  bb_buffer.generateStats();
+  hdbt.generateStats();
+  generateDBTBStats();
+}
+
+void BYTECODE_MODULE::resetStats() {
+  stats = BYTCODE_MODULE_STATS{};
+  bb_buffer.resetStats();
+  hdbt.resetStats();
+  resetDBTBStats();
+}

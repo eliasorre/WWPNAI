@@ -92,9 +92,7 @@ void O3_CPU::begin_phase()
   stats.begin_cycles = current_cycle;
   sim_stats = stats;
 
-  bytecode_module.stats = BYTCODE_MODULE_STATS{};
-  bytecode_module.bb_buffer.resetStats();
-  bytecode_module.hdbt.resetStats();
+  bytecode_module.resetStats();
 }
 
 void O3_CPU::end_phase(unsigned finished_cpu)
@@ -102,8 +100,8 @@ void O3_CPU::end_phase(unsigned finished_cpu)
   // Record where the phase ended (overwrite if this is later)
   sim_stats.end_instrs = num_retired;
   sim_stats.end_cycles = current_cycle;
-  bytecode_module.bb_buffer.generateStats();
-  bytecode_module.hdbt.generateStats();
+  bytecode_module.generateStats();
+
   sim_stats.bb_mod = bytecode_module.stats;
   sim_stats.bb_stats = bytecode_module.bb_buffer.stats;
   sim_stats.hdbt_stats = bytecode_module.hdbt.stats;
