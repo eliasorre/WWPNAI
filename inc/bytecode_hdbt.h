@@ -42,9 +42,9 @@ struct HDBT_ENTRY_STATS {
 };
 
 struct HDBT_STATS {
-    uint64_t hits;
-    uint64_t miss;
-    std::vector<HDBT_ENTRY_STATS> entryStats;
+    uint64_t hits = 0;
+    uint64_t miss = 0;
+    std::vector<HDBT_ENTRY_STATS> entryStats = {};
 };
 
 struct HDBT_ENTRY {
@@ -72,6 +72,7 @@ class BYTECODE_HDBT {
     HDBT_STATS stats;
     void initialize();
     void generateStats();
+    void resetStats();
     bool hit(int opcode);
 };
 

@@ -9,15 +9,13 @@
 #include <algorithm>
 #include <bitset>
 #include <deque>
-#include <sstream>
 #include <iostream>
 #include <map>
-#include <fmt/ostream.h>
+#include <sstream>
 
-
-#include "msl/lru_table.h"
 #include "bytecode_module.h"
-
+#include "msl/lru_table.h"
+#include <fmt/ostream.h>
 
 namespace
 {
@@ -27,8 +25,6 @@ constexpr int MAX_USAGE_VAL = 8;
 constexpr std::size_t STARTING_USAGE_VAL = 4;
 constexpr int MAX_CONFIDENCE = 3;
 constexpr int STARTING_CONFIDENCE = 3;
-
-
 
 struct btb_entry_t {
   int opcode = 0;
@@ -43,11 +39,13 @@ struct btb_entry_t {
 
   uint64_t hits{0}, misses{0};
 
-  void update(int64_t correctJump) {
-    if (valid == false) return;
+  void update(int64_t correctJump)
+  {
+    if (valid == false)
+      return;
     if (jump == 0) {
       jump = correctJump;
-      return; 
+      return;
     }
     if (correctJump == jump) {
       correctPrediction();
@@ -56,32 +54,44 @@ struct btb_entry_t {
     }
   }
 
-  void correctPrediction() { 
-    if (confidence < MAX_CONFIDENCE) confidence++;
-    if (usage < MAX_USAGE_VAL) usage++; 
+  void correctPrediction()
+  {
+    if (confidence < MAX_CONFIDENCE)
+      confidence++;
+    if (usage < MAX_USAGE_VAL)
+      usage++;
     hits++;
   }
 
-  void wrongPrediction(int64_t correctTarget) { 
-    if (confidence > 1) confidence--;
+  void wrongPrediction(int64_t correctTarget)
+  {
+    if (confidence > 1)
+      confidence--;
     else {
       confidence = STARTING_CONFIDENCE;
       jump = correctTarget;
     }
-    if (usage > 0) usage--;
-    else valid = false;
+    if (usage > 0)
+      usage--;
+    else
+      valid = false;
     misses++;
   }
 
-  btb_entry_t* findInnerEntry(int oparg) {
-    if constexpr (!USE_OPARGS) return this;
-    if (oparg == 0) return this;
-    auto entry = std::find_if(inner_entries.begin(), inner_entries.end(), [oparg] (btb_entry_t btb_entry) { return btb_entry.oparg == oparg; });
-    if (entry == inner_entries.end()) return nullptr;
+  btb_entry_t* findInnerEntry(int oparg)
+  {
+    if constexpr (!USE_OPARGS)
+      return this;
+    if (oparg == 0)
+      return this;
+    auto entry = std::find_if(inner_entries.begin(), inner_entries.end(), [oparg](btb_entry_t btb_entry) { return btb_entry.oparg == oparg; });
+    if (entry == inner_entries.end())
+      return nullptr;
     return &(*entry);
   }
 
-  int64_t makePrediction(int oparg) {
+  int64_t makePrediction(int oparg)
+  {
     auto innerEntry = findInnerEntry(oparg);
     if (innerEntry == nullptr) {
       return (valid) ? jump : 0;
@@ -89,34 +99,43 @@ struct btb_entry_t {
     return (innerEntry->valid) ? innerEntry->jump : 0;
   }
 
-  auto totalHitsAndMisses() const {
+  auto totalHitsAndMisses() const
+  {
     uint64_t totalHits = hits;
     uint64_t totalMisses = misses;
-    for (auto const &innerEntry : inner_entries) {
+    for (auto const& innerEntry : inner_entries) {
       totalHits += innerEntry.hits;
       totalMisses += innerEntry.misses;
     }
     return std::pair(totalHits, totalMisses);
   }
 
-  double percentageHits() const {
-    if (inner_entry) return 0;
+  double percentageHits() const
+  {
+    if (inner_entry)
+      return 0;
     auto [totalHits, totalMisses] = totalHitsAndMisses();
-    return 100 * (double) totalHits / ((double) totalHits + (double) totalMisses);
+    return 100 * (double)totalHits / ((double)totalHits + (double)totalMisses);
   }
-
 };
 
-std::vector<btb_entry_t> bytecode_BTB; 
+std::vector<btb_entry_t> bytecode_BTB;
 /*
  * The following structure identifies the size of call instructions so we can
  * find the target for a call's return, since calls may have different sizes.
  */
 } // namespace
 
-btb_entry_t* findOuterEntry(int opcode) {
+btb_entry_t* findOuterEntry(int opcode)
+{
   auto entry = std::find_if(bytecode_BTB.begin(), bytecode_BTB.end(), [opcode](btb_entry_t entry) { return entry.opcode == opcode; });
-  if (entry != bytecode_BTB.end()) return &(*entry);
+  if (entry != bytecode_BTB.end())
+    return &(*entry);
+  return nullptr;
+}
+
+btb_entry_t* createOuterEntry(int opcode)
+{
   btb_entry_t newEntry;
   newEntry.opcode = opcode;
   bytecode_BTB.emplace_back(newEntry);
@@ -125,12 +144,19 @@ btb_entry_t* findOuterEntry(int opcode) {
 
 int64_t BYTECODE_MODULE::btb_prediction(int opcode, int oparg)
 {
+  if (findOuterEntry(opcode) == nullptr)
+    return 0;
   return findOuterEntry(opcode)->makePrediction(oparg);
 }
 
 void BYTECODE_MODULE::update_btb(int opcode, int oparg, int64_t correct_jump)
 {
   auto outerEntry = findOuterEntry(opcode);
+  if (outerEntry == nullptr) {
+    // No point in creating entries for standard bytecodes
+    if (correct_jump == BYTECODE_SIZE) return;
+    outerEntry = createOuterEntry(opcode);
+  }
   auto innerEntry = outerEntry->findInnerEntry(oparg);
   if (innerEntry == nullptr) {
     if (correct_jump != outerEntry->jump) {
@@ -146,26 +172,28 @@ void BYTECODE_MODULE::update_btb(int opcode, int oparg, int64_t correct_jump)
   }
 }
 
-void BYTECODE_MODULE::printBTBs() {
-    // Iterate over each module and its corresponding INDIRECT_BTB entries
-    int moduleint = 0;
-    fmt::print(stdout, "\n --- BYTECODE MODULE BTB STATS --- \n");
-    uint64_t totalMisses{0}, totalHits{0};
-    for (auto const &outer_entry : bytecode_BTB) {
-      auto [hits, misses] = outer_entry.totalHitsAndMisses();
-      totalMisses += misses;
-      totalHits += hits;
-    }
-    auto totalPercentage = 100 * (double) totalHits / ((double) totalHits + (double) totalMisses);
-    stats.BTB_PERCENTAGE = totalPercentage;
+void BYTECODE_MODULE::printBTBs()
+{
+  // Iterate over each module and its corresponding INDIRECT_BTB entries
+  int moduleint = 0;
+  fmt::print(stdout, "\n --- BYTECODE MODULE BTB STATS --- \n");
+  uint64_t totalMisses{0}, totalHits{0};
+  for (auto const& outer_entry : bytecode_BTB) {
+    auto [hits, misses] = outer_entry.totalHitsAndMisses();
+    totalMisses += misses;
+    totalHits += hits;
+  }
+  auto totalPercentage = 100 * (double)totalHits / ((double)totalHits + (double)totalMisses);
+  stats.BTB_PERCENTAGE = totalPercentage;
 
-    fmt::print("BYTECODE BTB HITS: {}, MISS: {}, PERCENTAGE: {} \n", totalHits, totalMisses, totalPercentage);
-    for (auto const &outer_entry : bytecode_BTB) {
-        fmt::print(stdout, "Outer entry for opcode: {}, hits: {}, misses: {}, percentage: {}, prediction: {} \n \t", outer_entry.opcode, outer_entry.hits, outer_entry.misses, outer_entry.percentageHits(), outer_entry.jump);
-        for (auto const &inner_entry : outer_entry.inner_entries) {
-          fmt::print(stdout, "  [arg: {}, h: {}, m: {}, j: {}] ", inner_entry.opcode, inner_entry.hits, inner_entry.misses, inner_entry.jump);
-        }
-        fmt::print(stdout, "\n");
+  fmt::print("BYTECODE BTB HITS: {}, MISS: {}, PERCENTAGE: {} \n", totalHits, totalMisses, totalPercentage);
+  for (auto const& outer_entry : bytecode_BTB) {
+    fmt::print(stdout, "Outer entry for opcode: {}, hits: {}, misses: {}, percentage: {}, prediction: {} \n \t", outer_entry.opcode, outer_entry.hits,
+               outer_entry.misses, outer_entry.percentageHits(), outer_entry.jump);
+    for (auto const& inner_entry : outer_entry.inner_entries) {
+      fmt::print(stdout, "  [arg: {}, h: {}, m: {}, j: {}] ", inner_entry.opcode, inner_entry.hits, inner_entry.misses, inner_entry.jump);
     }
-    fmt::print(stdout, "---------------------------------- \n\n");
+    fmt::print(stdout, "\n");
+  }
+  fmt::print(stdout, "---------------------------------- \n\n");
 }

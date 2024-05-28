@@ -66,3 +66,14 @@ void BYTECODE_HDBT::generateStats()
     stats.entryStats.emplace_back(HDBT_ENTRY_STATS(entry.opcode, entry.timesSwitchedOut, entry.hits, entry.miss));
   }
 }
+
+void BYTECODE_HDBT::resetStats()
+{
+  HDBT_STATS newStats;
+  stats = newStats;
+  for (auto &entry : table) {
+    entry.timesSwitchedOut = 0;
+    entry.hits = 0;
+    entry.miss = 0;
+  }
+}

@@ -51,7 +51,7 @@ bool BYTECODE_BUFFER::shouldFetch(uint64_t baseAddr)
 
 void BYTECODE_BUFFER::fetching(uint64_t baseAddr, uint64_t currentCycle, bool hitInBB)
 {
-  auto victim = find_victim();
+  auto victim = find_victim(hitInBB);
   if (victim != nullptr) {
     victim->fetch(baseAddr, currentCycle);
     victim->prefetch = hitInBB;
@@ -60,7 +60,8 @@ void BYTECODE_BUFFER::fetching(uint64_t baseAddr, uint64_t currentCycle, bool hi
     if (hitInBB) stats.prefetches++;
     return;
   }
-
+  // Correct if no victims and we are dealing with a prefetch
+  if (hitInBB) return; 
   fmt::print(stderr, "[BYTECODE BUFFER] Found no vitim {} \n", baseAddr);
   printInterestingThings();
 }
@@ -140,7 +141,7 @@ BB_ENTRY* BYTECODE_BUFFER::hit(uint64_t sourceMemoryAddr)
   return nullptr;
 }
 
-BB_ENTRY* BYTECODE_BUFFER::find_victim()
+BB_ENTRY* BYTECODE_BUFFER::find_victim(bool prefetch)
 {
   auto initial_entry = std::find_if(buffers.begin(), buffers.end(), [](BB_ENTRY entry) { return !entry.fetching; });
   if (initial_entry == buffers.end()) {
@@ -153,6 +154,10 @@ BB_ENTRY* BYTECODE_BUFFER::find_victim()
         }
       }
       return victim;
+    }
+    // Don't want to remove entires for a prefetch
+    if (prefetch) {
+      return nullptr;
     }
     fmt::print("[BYTECODE BUFFER] not enough lines for all prefetches \n");
     printInterestingThings();
@@ -192,5 +197,17 @@ void BYTECODE_BUFFER::generateStats()
 {
   for (BB_ENTRY const& entry : buffers) {
     stats.entryStats.emplace_back(BB_ENTRY_STATS(entry.index, entry.timesSwitchedOut, entry.timesReset, entry.hits, entry.switched_with_no_hits));
+  }
+}
+
+void BYTECODE_BUFFER::resetStats()
+{
+  BB_STATS newStats; 
+  stats = newStats;
+  for (BB_ENTRY &entry : buffers) {
+    entry.timesReset = 0;
+    entry.timesSwitchedOut = 0;
+    entry.hits = 0;
+    entry.switched_with_no_hits = 0;
   }
 }

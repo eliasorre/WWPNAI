@@ -26,8 +26,8 @@
 
 constexpr std::size_t BYTECODE_SIZE = 2;
 constexpr int BYTECODE_BUFFER_SIZE = 16;
+constexpr std::size_t BYTECODE_BUFFER_NUM = 4;
 constexpr int LOG2_BB_BUFFER_SIZE = champsim::lg2(BYTECODE_BUFFER_SIZE);
-constexpr std::size_t BYTECODE_BUFFER_NUM = 3;
 constexpr uint64_t BYTECODE_FETCH_TIME = 1;
 constexpr uint64_t FETCH_OFFSET = 0; // 2 * BYTECODE_FETCH_TIME;
 constexpr uint64_t BYTECODE_BRANCH_MISPREDICT_PENALTY = 4;
@@ -51,14 +51,14 @@ struct BB_ENTRY_STATS {
 };
 
 struct BB_STATS {
-    uint64_t hits;
-    uint64_t miss;
-    uint64_t totalMissWait;
+    uint64_t hits = 0;
+    uint64_t miss = 0;
+    uint64_t totalMissWait = 0;
     uint64_t prefetches = 0;
     uint64_t inflightMisses = 0;
     uint64_t duplicated_prefetches = 0;
     uint64_t aggressive_prefetches = 0;
-    std::vector<BB_ENTRY_STATS> entryStats;
+    std::vector<BB_ENTRY_STATS> entryStats = {};
     double averageWaitTime() const { return (double) totalMissWait/ (double) miss; }
 };
 
@@ -103,7 +103,7 @@ class BYTECODE_BUFFER {
 
     void decrementLRUs();
     BB_ENTRY* hit(uint64_t sourceMemoryAddr);
-    BB_ENTRY* find_victim();
+    BB_ENTRY* find_victim(bool prefetch);
 
  public:
     BB_STATS stats;
@@ -112,6 +112,7 @@ class BYTECODE_BUFFER {
     void printInterestingThings();
     void initialize();
     void generateStats();
+    void resetStats();
     void fetching(uint64_t baseAddr, uint64_t currentCycle, bool hitInBB);
     bool hitInBB(uint64_t sourceMemoryAddr);
     bool shouldFetch(uint64_t sourceMemoryAddr);

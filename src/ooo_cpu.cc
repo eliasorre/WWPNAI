@@ -91,6 +91,10 @@ void O3_CPU::begin_phase()
   stats.begin_instrs = num_retired;
   stats.begin_cycles = current_cycle;
   sim_stats = stats;
+
+  bytecode_module.stats = BYTCODE_MODULE_STATS{};
+  bytecode_module.bb_buffer.resetStats();
+  bytecode_module.hdbt.resetStats();
 }
 
 void O3_CPU::end_phase(unsigned finished_cpu)
