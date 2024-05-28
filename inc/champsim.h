@@ -28,7 +28,6 @@ struct deadlock : public std::exception {
 };
 
 //#define DEBUG_PRINT
-#define SKIP_DISPATCH
 
 #ifdef DEBUG_PRINT
 constexpr bool debug_print = true;
@@ -36,6 +35,7 @@ constexpr bool debug_print = true;
 constexpr bool debug_print = false;
 #endif
 
+#define SKIP_DISPATCH
 #ifdef SKIP_DISPATCH
 constexpr bool skip_dispatch = true; 
 #else

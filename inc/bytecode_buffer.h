@@ -69,19 +69,20 @@ struct BB_ENTRY {
     uint64_t hits = 0;
     uint64_t hits_since_last_switch = 0;
     uint64_t switched_with_no_hits = 0;
+    uint64_t prefetch = false;
 
     uint64_t baseAddr;
     uint64_t maxAddr; 
     uint64_t fetchingEventCycle = 0;
     uint64_t fetching_base_addr;
-    uint64_t fetching_max_addr;
+    uint64_t fetching_max_addr; 
     bool valid = false;
     bool fetching = false;
     int lru = 0; 
 
     bool hit(uint64_t sourceAddr) const { return ((sourceAddr >= baseAddr) && (sourceAddr <= maxAddr) && valid); }
     bool currentlyFetching(uint64_t sourceAddr) const { return ((sourceAddr >= fetching_base_addr) && (sourceAddr <= fetching_max_addr) && fetching); }
-    void prefetch(uint64_t sourceAddr, uint64_t currentCycle) {
+    void fetch(uint64_t sourceAddr, uint64_t currentCycle) {
         fetching = true;
         timesSwitchedOut++;
         fetching_base_addr = (sourceAddr & ~1) - (FETCH_OFFSET * BYTECODE_SIZE);
@@ -106,13 +107,15 @@ class BYTECODE_BUFFER {
 
  public:
     BB_STATS stats;
+    std::pair<bool, uint64_t> currFetching;
+
     void printInterestingThings();
     void initialize();
     void generateStats();
-    void fetching(uint64_t baseAddr, uint64_t currentCycle);
+    void fetching(uint64_t baseAddr, uint64_t currentCycle, bool hitInBB);
     bool hitInBB(uint64_t sourceMemoryAddr);
     bool shouldFetch(uint64_t sourceMemoryAddr);
-    void updateBufferEntry(uint64_t baseAddr, uint64_t currentCycle);
+    bool updateBufferEntries(uint64_t baseAddr, uint64_t currentCycle);
     bool currentlyFetching(uint64_t baseAddr);
 };
 

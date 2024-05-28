@@ -101,6 +101,7 @@ struct cpu_stats {
   // bytecode load 
   uint64_t bytecodes_seen = 0;
   uint64_t skipped_instrs = 0;
+  std::map<bool, uint64_t> bytecode_fetches; 
   std::map<uint64_t, uint64_t> bytecode_lengths; 
   std::vector<bytecode_map_entry> *BYTECODE_MAP_ENTRIES;
   uint64_t foundDispatchOperation = 0;

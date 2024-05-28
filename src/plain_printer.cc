@@ -54,6 +54,12 @@ void champsim::plain_printer::print(O3_CPU::stats_type stats)
   fmt::print(stream, "Bytecode jump predicitons, correct: {} wrong {}, not found skip target: {}, stopped early: {} \n", stats.correctBytecodeJumpPredictions, stats.wrongBytecodeJumpPredictions, stats.notFoundSkipTarget, stats.stopppedEarly);
 
   if constexpr (skip_dispatch) {
+    auto safe_divide = [](double numerator, double denominator) -> double {
+        if (denominator == 0.0) {
+            return -1.0;
+        }
+        return numerator / denominator;
+    };
     fmt::print(stream, "Unclear bytecodeLoads IPs: ");
     for (auto const ip : stats.unclearBytecodeLoads) {
       fmt::print(stream, " ip: {} ", ip);
@@ -78,14 +84,14 @@ void champsim::plain_printer::print(O3_CPU::stats_type stats)
     }
     fmt::print(stream, "\n");
 
-    fmt::print(stream, "BYTECODE BUFFER stats, hits: {} miss: {}, percentage hits: {}, average miss cycles: {}, prefetches: {}, inflight misses: {}, duplicated_prefetches: {}, aggressive prefetches: {} \n", stats.bb_stats.hits, stats.bb_stats.miss, static_cast<double>(100 * stats.bb_stats.hits) / static_cast<double>(stats.bb_stats.hits + stats.bb_stats.miss), stats.bb_stats.averageWaitTime(), stats.bb_stats.prefetches, stats.bb_stats.inflightMisses, stats.bb_stats.duplicated_prefetches, stats.bb_stats.aggressive_prefetches);
+    fmt::print(stream, "BYTECODE BUFFER stats, hits: {} miss: {}, percentage hits: {}, average miss cycles: {}, prefetches: {}, total fetches for misses: {}, total prefetches: {}, inflight misses: {}, duplicated_prefetches: {}, aggressive prefetches: {} \n", stats.bb_stats.hits, stats.bb_stats.miss, safe_divide(static_cast<double>(100 * stats.bb_stats.hits), static_cast<double>(stats.bb_stats.hits + stats.bb_stats.miss)), stats.bb_stats.averageWaitTime(), stats.bb_stats.prefetches, stats.bytecode_fetches[false], stats.bytecode_fetches[true], stats.bb_stats.inflightMisses, stats.bb_stats.duplicated_prefetches, stats.bb_stats.aggressive_prefetches);
 
     fmt::print(stream, "BYTECODE BUFFER ENTRIES:\n");
     for (auto const &entry : stats.bb_stats.entryStats) {
           fmt::print(stream, "\t [{}] hits: {}, # switched: {}, # switched with no hits: {}, # resets: {} \n", entry.index, entry.hits, entry.timesSwitchedOut, entry.switched_with_no_hits, entry.timesReset);
     }
 
-    fmt::print(stream, "BYTECODE HDBT stats, hits: {} miss: {}, percentage hits: {} \n", stats.hdbt_stats.hits, stats.hdbt_stats.miss, (100 * stats.hdbt_stats.hits) / (stats.hdbt_stats.hits + stats.hdbt_stats.miss));
+    fmt::print(stream, "BYTECODE HDBT stats, hits: {} miss: {}, percentage hits: {} \n", stats.hdbt_stats.hits, stats.hdbt_stats.miss, safe_divide(100 * stats.hdbt_stats.hits, stats.hdbt_stats.hits + stats.hdbt_stats.miss));
 
     fmt::print(stream, "BYTECODE HDBT ENTRIES:\n");
     for (auto const &entry : stats.hdbt_stats.entryStats) {
@@ -101,7 +107,7 @@ void champsim::plain_printer::print(O3_CPU::stats_type stats)
     }
     if (totalMissesPCs == 0) totalMissesPCs = 1;
     for (auto const &entry : stats.hitsAndMissesAtPC) {
-      fmt::print(stream, " \t [pc: {:x}, h: {}, m: {}, of total misses: {}% \n]", entry.first, entry.second.second, entry.second.first, (static_cast<double>(entry.second.first) * 100)/totalMissesPCs);
+      fmt::print(stream, " \t [pc: {:x}, h: {}, m: {}, of total misses: {}% \n]", entry.first, entry.second.second, entry.second.first, safe_divide(static_cast<double>(entry.second.first) * 100, totalMissesPCs));
     }
     fmt::print("\n");
 
@@ -128,6 +134,12 @@ void champsim::plain_printer::print(O3_CPU::stats_type stats)
 
 void champsim::plain_printer::print(CACHE::stats_type stats)
 {
+  auto safe_divide = [](double numerator, double denominator) -> double {
+      if (denominator == 0.0) {
+          return -1.0;
+      }
+      return numerator / denominator;
+  };
   constexpr std::array<std::pair<std::string_view, std::size_t>, 5> types{
       {std::pair{"LOAD", champsim::to_underlying(access_type::LOAD)}, std::pair{"RFO", champsim::to_underlying(access_type::RFO)},
        std::pair{"PREFETCH", champsim::to_underlying(access_type::PREFETCH)}, std::pair{"WRITE", champsim::to_underlying(access_type::WRITE)},
@@ -159,7 +171,7 @@ void champsim::plain_printer::print(CACHE::stats_type stats)
     
     fmt::print(stream, "{} AVERAGE DISPATCH TABLE MISS LATENCY: {:.4g} cycles\n", stats.name, stats.avg_miss_latency_table);
 
-    fmt::print(stream, "{} AVERAGE BYTECODE FILL : {} %\n", stats.name, stats.bytecode_occupancy[stats.name].first/(float) stats.bytecode_occupancy[stats.name].second);
+    fmt::print(stream, "{} AVERAGE BYTECODE FILL : {} %\n", stats.name, safe_divide(stats.bytecode_occupancy[stats.name].first, (float) stats.bytecode_occupancy[stats.name].second));
 
     fmt::print(stream, "\n");
   }

@@ -165,9 +165,23 @@ void O3_CPU::initialize_instruction()
           }
           if (!shouldFetch)
             bytecode_module.bb_buffer.stats.inflightMisses++;
-          bytecode_buffer_miss = true;
-          if (target != nullptr)
-            fetch_resume_cycle = std::numeric_limits<uint64_t>::max();
+          if (target != nullptr && shouldFetch) {
+            bytecode_buffer_miss = true;
+            bytecode_buffer_miss = true;
+            if (target != nullptr)
+              bytecode_buffer_miss = true;
+            if (target != nullptr)
+              fetch_resume_cycle = std::numeric_limits<uint64_t>::max();
+            if (bytecode_module.bb_buffer.currFetching.first == false) {
+              if (fetch_pc == 0) {
+                fmt::print(stderr, "Fetching 0 on instr: {:x}, cycle: {} \n", queue_front.ip, this->current_cycle);
+              }
+              bytecode_module.bb_buffer.currFetching = {true, fetch_pc};
+            } else {
+              fmt::print(stderr, "Already miss? \n");
+              fmt::print(stderr, "\t miss on {:x} \n", bytecode_module.bb_buffer.currFetching);
+            }
+          }
         }
 
         if (target != nullptr) {
@@ -186,14 +200,16 @@ void O3_CPU::initialize_instruction()
           // We should fetch future bytecodes to the Bytecode buffer. The IP is set to be
           // equal to the address pointed to by the Bytecode-PC. We remove all other load
           // dependencies from this instruction, as the dependency is handled on the BB side
-          bytecode_module.bb_buffer.fetching(fetch_pc, this->current_cycle);
+          bytecode_module.bb_buffer.fetching(fetch_pc, this->current_cycle, hitInBB);
+          sim_stats.bytecode_fetches[hitInBB]++;
           CacheBus::request_type fetch_packet;
           fetch_packet.v_address = fetch_pc;
           fetch_packet.instr_id = input_queue.front().instr_id;
           fetch_packet.ip = fetch_pc;
           fetch_packet.instr_depend_on_me = {};
           fetch_packet.ld_type = LOAD_TYPE::BYTECODE;
-          if(!L1I_bus.issue_read(fetch_packet)) fmt::print(stderr, "Issue when fetching bytecode \n");
+          if (!L1I_bus.issue_read(fetch_packet))
+            fmt::print(stderr, "Issue when fetching bytecode \n");
         }
       }
     }
@@ -345,6 +361,8 @@ void O3_CPU::reorder_queues()
     auto const size_input_queue = input_queue.size();
     auto const total_queue_size = input_queue.size() + trace_queue.size();
     int poped_elems = 0;
+    bool foundABytecode = false;
+    uint64_t jmp_addr = 0;
     while (reorder_needed) {
       ooo_model_instr instr = input_queue.empty() ? trace_queue.front() : input_queue.front();
       instrIps.push_back(instr.ip);
@@ -355,8 +373,26 @@ void O3_CPU::reorder_queues()
         }
       } else if (instr.ld_type == load_type::BYTECODE) {
         dispatch_instrs.push_front(instr);
+        if (foundABytecode) {
+          fmt::print(stderr, "Found two bytecodes inside a dispatch? \n");
+        }
+        foundABytecode = true;
+      } else if (instr.ld_type == load_type::DISPATCH_TABLE) {
+        dispatch_instrs.push_back(instr);
+        jmp_addr = instr.load_val;
       } else if (instr.ld_type == load_type::COMBINED_JUMP || instr.ld_type == load_type::JUMP_POINT) {
         dispatch_instrs.push_back(instr);
+        if (instr.ld_type == load_type::JUMP_POINT && instr.branch_target != jmp_addr) {
+          fmt::print(stderr, "Target is wrong? Target {} pred {}\n", instr.branch_target, jmp_addr);
+        } else {
+          input_queue.empty() ? trace_queue.pop_front() : input_queue.pop_front();
+          ooo_model_instr next_instr = input_queue.empty() ? trace_queue.front() : input_queue.front();
+          if (next_instr.ip != instr.branch_target) {
+            fmt::print(stderr, "Combined target is wrong? Target {} pred {}\n", instr.branch_target, next_instr.ip);
+          }
+          poped_elems++;
+          break;
+        }
         reorder_needed = false;
       } else {
         dispatch_instrs.push_back(instr);
@@ -523,11 +559,15 @@ void O3_CPU::do_check_dib(ooo_model_instr& instr)
     if constexpr (champsim::skip_dispatch) {
       // return result of fetching bytecode instructions to the Bytecode buffer
       if (instr.ld_type == load_type::BYTECODE) {
-        bytecode_module.bb_buffer.updateBufferEntry(instr.ip, this->current_cycle);
+        bool foundCurrNeeded = bytecode_module.bb_buffer.updateBufferEntries(instr.ip, this->current_cycle);
         if constexpr (BB_DEBUG_LEVEL > 2)
           fmt::print("[BYTECODE BUFFER] entry was in dib, instr id {}, pc {} \n", instr.instr_id, instr.ip);
         if (bytecode_buffer_miss && fetch_resume_cycle > this->current_cycle) {
-          fetch_resume_cycle = this->current_cycle;
+          if (foundCurrNeeded) {
+            fmt::print("[BYTECODE BUFFER] entry was in dib, instr id {}, pc {} \n", instr.instr_id, instr.ip);
+            fetch_resume_cycle = this->current_cycle;
+            bytecode_buffer_miss = false;
+          }
         }
       }
     }
@@ -919,14 +959,25 @@ long O3_CPU::handle_memory_return()
   for (auto l1i_bw = FETCH_WIDTH, to_read = L1I_BANDWIDTH; l1i_bw > 0 && to_read > 0 && !L1I_bus.lower_level->returned.empty(); --to_read) {
     auto& l1i_entry = L1I_bus.lower_level->returned.front();
     if constexpr (champsim::skip_dispatch) {
-      if (l1i_bw > 0 && l1i_entry.instr_depend_on_me.empty()) {
-        if (bytecode_module.bb_buffer.currentlyFetching(l1i_entry.v_address)) {
-          bytecode_module.bb_buffer.updateBufferEntry(l1i_entry.v_address, this->current_cycle);
+      if (bytecode_module.bb_buffer.currentlyFetching(l1i_entry.v_address)) {
+        bool foundCurrFetching = bytecode_module.bb_buffer.updateBufferEntries(l1i_entry.v_address, this->current_cycle);
+        if (foundCurrFetching && bytecode_module.bb_buffer.currFetching.first) {
           if (bytecode_buffer_miss && fetch_resume_cycle > this->current_cycle) {
             fetch_resume_cycle = this->current_cycle;
+            bytecode_buffer_miss = false;
+            bytecode_module.bb_buffer.currFetching.first = false;
+          } else {
+            if (bytecode_buffer_miss) {
+              fmt::print(stderr, "Possible problem on miss outside loop: {:x} \n", l1i_entry.v_address);
+              bytecode_module.bb_buffer.printInterestingThings();
+            }
+            if (fetch_resume_cycle >= this->current_cycle) {
+              fmt::print(stderr, "Possible problem on cycle outside loop {:x} \n", l1i_entry.v_address);
+              bytecode_module.bb_buffer.printInterestingThings();
+            }
           }
         }
-      } 
+      }
     }
     while (l1i_bw > 0 && !l1i_entry.instr_depend_on_me.empty()) {
       ooo_model_instr& fetched = l1i_entry.instr_depend_on_me.front();
@@ -936,16 +987,6 @@ long O3_CPU::handle_memory_return()
         ++progress;
         if constexpr (champsim::debug_print) {
           fmt::print("[IFETCH] {} instr_id: {} fetch completed\n", __func__, fetched.instr_id);
-        }
-
-        if constexpr (champsim::skip_dispatch) {
-          // return result of fetching bytecode instructions to the Bytecode buffer
-          if (fetched.ld_type == load_type::BYTECODE) {
-            bytecode_module.bb_buffer.updateBufferEntry(fetched.ip, this->current_cycle);
-            if (bytecode_buffer_miss && fetch_resume_cycle > this->current_cycle) {
-              fetch_resume_cycle = this->current_cycle;
-            }
-          }
         }
       }
       l1i_entry.instr_depend_on_me.erase(std::begin(l1i_entry.instr_depend_on_me));
@@ -1025,6 +1066,14 @@ void O3_CPU::print_deadlock()
   std::string_view sq_fmt{"instr_id: {} address: {:#x} fetch_issued: {} event_cycle: {} LQ waiting: {}"};
   champsim::range_print_deadlock(LQ, "cpu" + std::to_string(cpu) + "_LQ", lq_fmt, lq_pack);
   champsim::range_print_deadlock(SQ, "cpu" + std::to_string(cpu) + "_SQ", sq_fmt, sq_pack);
+
+  // Print BYTECODE MODULE
+  if constexpr (champsim::skip_dispatch) {
+    fmt::print("Status of bytecode module. Fetching: {}, addr: {:x} \n", bytecode_module.bb_buffer.currFetching.first,
+               bytecode_module.bb_buffer.currFetching.second);
+    fmt::print("Hit in BB: {} \n", bytecode_module.bb_buffer.hitInBB(bytecode_module.bb_buffer.currFetching.second));
+    bytecode_module.bb_buffer.printInterestingThings();
+  }
 }
 // LCOV_EXCL_STOP
 
