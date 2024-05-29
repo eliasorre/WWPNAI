@@ -57,11 +57,13 @@ void BYTECODE_BUFFER::fetching(uint64_t baseAddr, uint64_t currentCycle, bool hi
     victim->prefetch = hitInBB;
     if constexpr (BB_DEBUG_LEVEL > 1)
       fmt::print("[BYTECODE BUFFER] Starting fetching in BB: {}, victim: {},  \n", baseAddr, victim->index);
-    if (hitInBB) stats.prefetches++;
+    if (hitInBB)
+      stats.prefetches++;
     return;
   }
   // Correct if no victims and we are dealing with a prefetch
-  if (hitInBB) return; 
+  if (hitInBB)
+    return;
   fmt::print(stderr, "[BYTECODE BUFFER] Found no vitim {} \n", baseAddr);
   printInterestingThings();
 }
@@ -69,8 +71,18 @@ void BYTECODE_BUFFER::fetching(uint64_t baseAddr, uint64_t currentCycle, bool hi
 bool BYTECODE_BUFFER::currentlyFetching(uint64_t baseAddr)
 {
   for (BB_ENTRY const& entry : buffers) {
-    if (entry.currentlyFetching(baseAddr))
+    if (entry.currentlyFetching(baseAddr & ~1))
       return true;
+  }
+  return false;
+}
+
+bool BYTECODE_BUFFER::blockIsNeeded(uint64_t blockBase)
+{
+  for (BB_ENTRY const& entry : buffers) {
+    if (entry.inCacheBlock(blockBase)) {
+      return true;
+    }
   }
   return false;
 }
@@ -80,7 +92,7 @@ bool BYTECODE_BUFFER::updateBufferEntries(uint64_t baseAddr, uint64_t currentCyc
   bool currFetchingFound = false;
   bool alreadyFetched = hit(baseAddr);
 
-  auto initial_entry = std::find_if(buffers.begin(), buffers.end(), [baseAddr](BB_ENTRY entry) { return entry.currentlyFetching(baseAddr & ~1); });
+  auto initial_entry = std::find_if(buffers.begin(), buffers.end(), [baseAddr](BB_ENTRY entry) { return entry.inCacheBlock(baseAddr & ~1); });
   if (initial_entry == buffers.end()) {
     if (!alreadyFetched) {
       fmt::print(stderr, "Big error \n");
@@ -89,12 +101,13 @@ bool BYTECODE_BUFFER::updateBufferEntries(uint64_t baseAddr, uint64_t currentCyc
     return false;
   }
   auto entryToUpdate = &(*initial_entry);
+
   for (auto& entry : buffers) {
-    if (entry.currentlyFetching(baseAddr & ~1) && (entry.fetching_base_addr < entryToUpdate->fetching_base_addr)) {
+    if (entry.inCacheBlock(baseAddr & ~1) && (entry.fetching_base_addr < entryToUpdate->fetching_base_addr)) {
       entryToUpdate = &entry;
     }
   }
-  stats.totalMissWait += currentCycle - entryToUpdate->fetchingEventCycle;
+
   entryToUpdate->valid = true;
   entryToUpdate->fetching = false;
   if (entryToUpdate->hits_since_last_switch == 0)
@@ -108,16 +121,31 @@ bool BYTECODE_BUFFER::updateBufferEntries(uint64_t baseAddr, uint64_t currentCyc
   entryToUpdate->lru++;
   if (entryToUpdate->hit(currFetching.second) && currFetching.first) {
     currFetchingFound = true;
+    stats.totalMissWait += currentCycle - entryToUpdate->fetchingEventCycle;
   }
 
-  for (BB_ENTRY& entry : buffers) {
-    if constexpr (BB_DEBUG_LEVEL > 2)
-      fmt::print("[BYTECODE BUFFER] Checking updating on entry, fetching {}, lru {}, valid {}, baseaddr {}, maxaddr {} \n", entry.fetching, entry.lru,
-                 entry.valid, entry.baseAddr, entry.maxAddr);
-    if (entry.currentlyFetching(baseAddr & ~1)) {
+  for (auto& entry : buffers) {
+     if (entry.fetching && entry.inCacheBlock(baseAddr)) {
+      if (hit(entry.fetching_base_addr)) {
         entry.fetching = false;
         stats.duplicated_prefetches++;
-    }
+      } else {
+        entry.valid = true;
+        entry.fetching = false;
+        if (entry.hits_since_last_switch == 0)
+          entry.switched_with_no_hits++;
+
+        entry.hits_since_last_switch = 0;
+        entry.baseAddr = entry.fetching_base_addr;
+        entry.maxAddr = entry.fetching_max_addr;
+        entry.lru = STARTING_LRU_VAL;
+
+        if (entry.hit(currFetching.second) && currFetching.first) {
+          currFetchingFound = true;
+          stats.totalMissWait += currentCycle - entry.fetchingEventCycle;
+        }
+      }
+     }
   }
 
   return currFetchingFound;
@@ -202,9 +230,9 @@ void BYTECODE_BUFFER::generateStats()
 
 void BYTECODE_BUFFER::resetStats()
 {
-  BB_STATS newStats; 
+  BB_STATS newStats;
   stats = newStats;
-  for (BB_ENTRY &entry : buffers) {
+  for (BB_ENTRY& entry : buffers) {
     entry.timesReset = 0;
     entry.timesSwitchedOut = 0;
     entry.hits = 0;

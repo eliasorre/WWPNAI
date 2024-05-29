@@ -145,6 +145,7 @@ void O3_CPU::initialize_instruction()
           instr_oparg = (queue_front.load_val >> 8);
         }
         bool hitInBB = bytecode_module.bb_buffer.hitInBB(bytecode_pc);
+        bool correctPrediction = false;
         bool shouldFetch = false;
         auto target = find_skip_target(queue_front);
         uint64_t predicted_next_bpc = bytecode_pc + BYTECODE_SIZE * BYTECODE_FETCH_TIME;
@@ -152,7 +153,7 @@ void O3_CPU::initialize_instruction()
           sim_stats.hitsAndMissesAtPC[queue_front.ip].second++;
           if (target != nullptr) {
             // THIS SHOULD LATER USE THE BYTECODE BTB TO PREDICT NEXT TARGET
-            bytecode_module.updateBranching(bytecode_pc);
+            correctPrediction = bytecode_module.correctPrediction(bytecode_pc);
             predicted_next_bpc = bytecode_module.predict_branching(instr_opcode, instr_oparg, bytecode_pc);
           }
           shouldFetch = bytecode_module.bb_buffer.shouldFetch(predicted_next_bpc);
@@ -162,27 +163,19 @@ void O3_CPU::initialize_instruction()
         } else {
           sim_stats.hitsAndMissesAtPC[queue_front.ip].first++;
           shouldFetch = bytecode_module.bb_buffer.shouldFetch(bytecode_pc);
-          if (shouldFetch) {
-            fetch_pc = bytecode_pc;
-          }
-          if (!shouldFetch)
-            bytecode_module.bb_buffer.stats.inflightMisses++;
-          if (target != nullptr && shouldFetch) {
+          fetch_pc = bytecode_pc;
+          if (target != nullptr) {
+            fetch_resume_cycle = std::numeric_limits<uint64_t>::max();
             bytecode_buffer_miss = true;
-            bytecode_buffer_miss = true;
-            if (target != nullptr)
-              bytecode_buffer_miss = true;
-            if (target != nullptr)
-              fetch_resume_cycle = std::numeric_limits<uint64_t>::max();
-            if (bytecode_module.bb_buffer.currFetching.first == false) {
-              if (fetch_pc == 0) {
-                fmt::print(stderr, "Fetching 0 on instr: {:x}, cycle: {} \n", queue_front.ip, this->current_cycle);
-              }
-              bytecode_module.bb_buffer.currFetching = {true, fetch_pc};
-            } else {
+            if (bytecode_module.bb_buffer.currFetching.first != false) {
               fmt::print(stderr, "Already miss? \n");
               fmt::print(stderr, "\t miss on {:x} \n", bytecode_module.bb_buffer.currFetching);
             }
+            bytecode_module.bb_buffer.currFetching = {true, fetch_pc};
+          }
+
+          if (!shouldFetch){
+            bytecode_module.bb_buffer.stats.inflightMisses++;
           }
         }
 
@@ -680,7 +673,6 @@ long O3_CPU::decode_instruction()
         this->fetch_resume_cycle = this->current_cycle + BRANCH_MISPREDICT_PENALTY;
       }
     }
-
     // Add to dispatch
     db_entry.event_cycle = this->current_cycle + (this->warmup ? 0 : this->DISPATCH_LATENCY);
   });
@@ -961,7 +953,7 @@ long O3_CPU::handle_memory_return()
   for (auto l1i_bw = FETCH_WIDTH, to_read = L1I_BANDWIDTH; l1i_bw > 0 && to_read > 0 && !L1I_bus.lower_level->returned.empty(); --to_read) {
     auto& l1i_entry = L1I_bus.lower_level->returned.front();
     if constexpr (champsim::skip_dispatch) {
-      if (bytecode_module.bb_buffer.currentlyFetching(l1i_entry.v_address)) {
+      if (bytecode_module.bb_buffer.blockIsNeeded(l1i_entry.v_address)) {
         bool foundCurrFetching = bytecode_module.bb_buffer.updateBufferEntries(l1i_entry.v_address, this->current_cycle);
         if (foundCurrFetching && bytecode_module.bb_buffer.currFetching.first) {
           if (bytecode_buffer_miss && fetch_resume_cycle > this->current_cycle) {

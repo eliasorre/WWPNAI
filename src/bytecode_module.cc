@@ -20,19 +20,22 @@ uint64_t BYTECODE_MODULE::predict_branching(int opcode, int oparg, uint64_t curr
     return current_bpc + predicted_branch_target;
 }
 
-void BYTECODE_MODULE::updateBranching(uint64_t correct_target)
+bool BYTECODE_MODULE::correctPrediction(uint64_t correct_target)
 {
+    update_btb(last_branch_opcode, last_branch_oparg, correct_target - last_bpc);
     if (last_prediction != 0) {
         if (last_prediction == correct_target) {
             stats.strongly_correct++;
+            return true;
         } else if ((last_prediction >> LOG2_BB_BUFFER_SIZE) << LOG2_BB_BUFFER_SIZE == (correct_target >> LOG2_BB_BUFFER_SIZE) << LOG2_BB_BUFFER_SIZE) {
             stats.weakly_correct++;
+            return false;
         } else {
             stats.wrong++;
+            return false;
         };
     }
-
-    update_btb(last_branch_opcode, last_branch_oparg, correct_target - last_bpc);
+    return true;
 }
 
 void BYTECODE_MODULE::generateStats() {

@@ -62,7 +62,7 @@ class BYTECODE_MODULE {
 
         void initialize(uint32_t cpu);
         uint64_t predict_branching(int opcode, int oparg,  uint64_t current_bpc);
-        void updateBranching(uint64_t correct_target);
+        bool correctPrediction(uint64_t correct_target);
 };
 
 

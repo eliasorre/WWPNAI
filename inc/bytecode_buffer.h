@@ -25,8 +25,8 @@
 #include <type_traits>
 
 constexpr std::size_t BYTECODE_SIZE = 2;
-constexpr int BYTECODE_BUFFER_SIZE = 16;
-constexpr std::size_t BYTECODE_BUFFER_NUM = 3;
+constexpr int BYTECODE_BUFFER_SIZE = 8;
+constexpr std::size_t BYTECODE_BUFFER_NUM = 8;
 constexpr int LOG2_BB_BUFFER_SIZE = champsim::lg2(BYTECODE_BUFFER_SIZE);
 constexpr uint64_t BYTECODE_FETCH_TIME = 1;
 constexpr uint64_t FETCH_OFFSET = 0; // 2 * BYTECODE_FETCH_TIME;
@@ -89,6 +89,10 @@ struct BB_ENTRY {
         fetching_max_addr = (sourceAddr & ~1) + ((BYTECODE_BUFFER_SIZE - FETCH_OFFSET) * BYTECODE_SIZE);
         fetchingEventCycle = currentCycle;
     }
+
+    bool inCacheBlock(uint64_t blockBase) const {
+        return fetching && (fetching_base_addr >> LOG2_BLOCK_SIZE) == (blockBase >> LOG2_BLOCK_SIZE);
+    }
     
     void reset() {
         fetching = false;
@@ -118,6 +122,7 @@ class BYTECODE_BUFFER {
     bool shouldFetch(uint64_t sourceMemoryAddr);
     bool updateBufferEntries(uint64_t baseAddr, uint64_t currentCycle);
     bool currentlyFetching(uint64_t baseAddr);
+    bool blockIsNeeded(uint64_t blockBase);
 };
 
 #endif
