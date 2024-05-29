@@ -38,7 +38,8 @@ enum class LOAD_TYPE : unsigned {
   INITIAL_POINT = 6,
   COMBINED_JUMP = 7,
   OTHER_DISPATCH_JUMP = 8,
-  NOT_SKIP = 9
+  NOT_SKIP = 9, 
+  MISS_BPC_PRED = 10
   }; 
 
 enum class access_type : unsigned {

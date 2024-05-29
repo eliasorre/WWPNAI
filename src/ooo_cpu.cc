@@ -145,13 +145,14 @@ void O3_CPU::initialize_instruction()
           instr_oparg = (queue_front.load_val >> 8);
         }
         bool hitInBB = bytecode_module.bb_buffer.hitInBB(bytecode_pc);
+        bool correctPrediction = false;
         bool shouldFetch = false;
         auto target = find_skip_target(queue_front);
         uint64_t predicted_next_bpc = bytecode_pc + BYTECODE_SIZE * BYTECODE_FETCH_TIME;
         if (hitInBB) {
           sim_stats.hitsAndMissesAtPC[queue_front.ip].second++;
           if (target != nullptr) {
-            bytecode_module.correctPrediction(bytecode_pc);
+            correctPrediction = bytecode_module.correctPrediction(bytecode_pc);
             predicted_next_bpc = bytecode_module.predict_branching(instr_opcode, instr_oparg, bytecode_pc);
           }
           shouldFetch = bytecode_module.bb_buffer.shouldFetch(predicted_next_bpc);
@@ -180,6 +181,13 @@ void O3_CPU::initialize_instruction()
         if (target != nullptr) {
           // STOP FETCHING AS THIS IS BRANCHING TYPE
           if (bytecode_module.hdbt.hit(instr_opcode)) {
+            if (!correctPrediction && queue_front.ld_type == load_type::BYTECODE) {
+              queue_front.ld_type = load_type::MISS_BPC_PRED;
+              miss_BPC_cycle = this->current_cycle;
+              IFETCH_BUFFER.push_back(queue_front);
+              miss_BPC_pred = true;
+              sim_stats.miss_bpc++;
+            }
             stop_fetch = true;
             skip_forward(*target);
           } else {
@@ -788,6 +796,10 @@ void O3_CPU::do_memory_scheduling(ooo_model_instr& instr)
 {
   // load
   for (auto& smem : instr.source_memory) {
+    if (instr.ld_type == load_type::MISS_BPC_PRED) {
+      miss_BPC_pred = false;
+      sim_stats.miss_BPC_pred_penalty += this->current_cycle - miss_BPC_cycle;
+    }
     auto q_entry = std::find_if_not(std::begin(LQ), std::end(LQ), [](const auto& lq_entry) { return lq_entry.has_value(); });
     assert(q_entry != std::end(LQ));
     q_entry->emplace(instr.instr_id, smem, instr.ip, instr.asid, (LOAD_TYPE)instr.ld_type); // add it to the load queue
@@ -856,6 +868,10 @@ long O3_CPU::operate_lsq()
       if (success) {
         --load_bw;
         lq_entry->fetch_issued = true;
+        if (lq_entry->ld_type == LOAD_TYPE::MISS_BPC_PRED) {
+          lq_entry->finish(ROB.begin(), ROB.end());
+          lq_entry.reset();
+        }
       }
     }
   }
@@ -902,7 +918,9 @@ bool O3_CPU::execute_load(const LSQ_ENTRY& lq_entry)
   if constexpr (champsim::debug_print) {
     fmt::print("[LQ] {} instr_id: {} vaddr: {:#x}\n", __func__, data_packet.instr_id, data_packet.v_address);
   }
-
+  if (lq_entry.ld_type == LOAD_TYPE::MISS_BPC_PRED) {
+    return true;
+  }
   return L1D_bus.issue_read(data_packet);
 }
 

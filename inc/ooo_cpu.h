@@ -109,6 +109,8 @@ struct cpu_stats {
   std::map<uint64_t, uint64_t> lengthBetweenBytecodeAndTable;
   uint64_t totalFound = 0;
   std::map<int, uint64_t> bytecodeCounts; 
+  uint64_t miss_BPC_pred_penalty = 0;
+  uint64_t miss_bpc = 0;
 
   // to find correlation between load and jump
   std::map<uint64_t, uint64_t> lengthBetweenPredictionAndJump;
@@ -217,6 +219,8 @@ public:
   std::set<uint64_t> would_be_skipped_instrs;
   std::set<uint64_t> weirdBytecodeLoads;
   std::set<uint64_t> weirdNonSkips;
+  bool miss_BPC_pred = false;
+  uint64_t miss_BPC_cycle = 0;
 
 
   // Constants
