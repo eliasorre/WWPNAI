@@ -145,15 +145,13 @@ void O3_CPU::initialize_instruction()
           instr_oparg = (queue_front.load_val >> 8);
         }
         bool hitInBB = bytecode_module.bb_buffer.hitInBB(bytecode_pc);
-        bool correctPrediction = false;
         bool shouldFetch = false;
         auto target = find_skip_target(queue_front);
         uint64_t predicted_next_bpc = bytecode_pc + BYTECODE_SIZE * BYTECODE_FETCH_TIME;
         if (hitInBB) {
           sim_stats.hitsAndMissesAtPC[queue_front.ip].second++;
           if (target != nullptr) {
-            // THIS SHOULD LATER USE THE BYTECODE BTB TO PREDICT NEXT TARGET
-            correctPrediction = bytecode_module.correctPrediction(bytecode_pc);
+            bytecode_module.correctPrediction(bytecode_pc);
             predicted_next_bpc = bytecode_module.predict_branching(instr_opcode, instr_oparg, bytecode_pc);
           }
           shouldFetch = bytecode_module.bb_buffer.shouldFetch(predicted_next_bpc);
@@ -174,7 +172,7 @@ void O3_CPU::initialize_instruction()
             bytecode_module.bb_buffer.currFetching = {true, fetch_pc};
           }
 
-          if (!shouldFetch){
+          if (!shouldFetch) {
             bytecode_module.bb_buffer.stats.inflightMisses++;
           }
         }

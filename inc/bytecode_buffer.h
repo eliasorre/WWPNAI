@@ -25,8 +25,8 @@
 #include <type_traits>
 
 constexpr std::size_t BYTECODE_SIZE = 2;
-constexpr int BYTECODE_BUFFER_SIZE = 8;
-constexpr std::size_t BYTECODE_BUFFER_NUM = 8;
+constexpr int BYTECODE_BUFFER_SIZE = 16;
+constexpr std::size_t BYTECODE_BUFFER_NUM = 3;
 constexpr int LOG2_BB_BUFFER_SIZE = champsim::lg2(BYTECODE_BUFFER_SIZE);
 constexpr uint64_t BYTECODE_FETCH_TIME = 1;
 constexpr uint64_t FETCH_OFFSET = 0; // 2 * BYTECODE_FETCH_TIME;
