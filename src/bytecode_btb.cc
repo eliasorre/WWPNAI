@@ -180,6 +180,16 @@ int64_t BYTECODE_MODULE::btb_prediction(int opcode, int oparg)
 void BYTECODE_MODULE::update_btb(int opcode, int oparg, int64_t correct_jump)
 {
   auto outerEntry = findOuterEntry(opcode);
+  if (correct_jump > 16) {
+    stats.very_large_jumps++;
+  }
+  else if (correct_jump > 4) {
+    stats.large_jumps++;
+  } else {
+    stats.small_jumps++;
+  }
+
+  
   if (outerEntry == nullptr) {
     // No point in creating entries for standard bytecodes
     if (correct_jump == BYTECODE_SIZE)

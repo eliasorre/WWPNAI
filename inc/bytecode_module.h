@@ -34,6 +34,11 @@ struct BYTCODE_MODULE_STATS {
     uint64_t strongly_correct = 0;
     uint64_t weakly_correct = 0;
     uint64_t wrong = 0;
+
+    uint64_t very_large_jumps = 0;
+    uint64_t large_jumps = 0;
+    uint64_t small_jumps = 0;
+
     std::map<int, btb_entry_stats> dbtb_entryStats = {};
     double BTB_PERCENTAGE = 0;
 };

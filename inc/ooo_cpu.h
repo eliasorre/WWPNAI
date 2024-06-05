@@ -111,6 +111,8 @@ struct cpu_stats {
   std::map<int, uint64_t> bytecodeCounts; 
   uint64_t miss_BPC_pred_penalty = 0;
   uint64_t miss_bpc = 0;
+  uint64_t bpc_max = 0;
+  uint64_t bpc_min = std::numeric_limits<uint64_t>::max();
 
   // to find correlation between load and jump
   std::map<uint64_t, uint64_t> lengthBetweenPredictionAndJump;

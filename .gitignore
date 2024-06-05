@@ -28,3 +28,12 @@ tracer/pin/received_video.mp4
 tracer/pin/test
 tracer/pin/tool_debug.out
 tracer/pin/obj-intel64 (copy)/champsim_tracer.so
+tracer/benchmarks/knucleotide-input25000000.txt
+tools/old_plots/**
+tools/plots/**
+tools/results/**
+
+tools/script/**
+temp.png
+tools/initial_bars.png
+json/**

@@ -102,6 +102,8 @@
         "version": "cpp",
         "stacktrace": "cpp",
         "any": "cpp",
-        "stack": "cpp"
+        "stack": "cpp",
+        "cfenv": "cpp",
+        "text_encoding": "cpp"
     }
 }

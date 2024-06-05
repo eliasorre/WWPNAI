@@ -75,7 +75,7 @@ CACHE::mshr_type CACHE::mshr_type::merge(mshr_type predecessor, mshr_type succes
 }
 
 CACHE::BLOCK::BLOCK(mshr_type mshr)
-    : valid(true), prefetch(mshr.prefetch_from_this), dirty(mshr.type == access_type::WRITE), address(mshr.address), v_address(mshr.v_address), data(mshr.data), bytecode(mshr.ld_type == LOAD_TYPE::BYTECODE || mshr.ld_type == LOAD_TYPE::DISPATCH_TABLE)
+    : valid(true), prefetch(mshr.prefetch_from_this), dirty(mshr.type == access_type::WRITE), address(mshr.address), v_address(mshr.v_address), data(mshr.data), bytecode(mshr.ld_type == LOAD_TYPE::BLW || mshr.ld_type == LOAD_TYPE::BTG)
 {
 }
 
@@ -154,9 +154,9 @@ bool CACHE::handle_fill(const mshr_type& fill_mshr)
 
   if (success) {
     // COLLECT STATS
-    if (fill_mshr.ld_type == LOAD_TYPE::BYTECODE) {
+    if (fill_mshr.ld_type == LOAD_TYPE::BLW) {
       sim_stats.total_miss_latency_bytecode += current_cycle - (fill_mshr.cycle_enqueued + 1);
-    } else if (fill_mshr.ld_type == LOAD_TYPE::DISPATCH_TABLE) {
+    } else if (fill_mshr.ld_type == LOAD_TYPE::BTG) {
       sim_stats.total_miss_latency_dispatch_table += current_cycle - (fill_mshr.cycle_enqueued + 1);
     } else {
       sim_stats.total_miss_latency += current_cycle - (fill_mshr.cycle_enqueued + 1);
@@ -198,9 +198,9 @@ bool CACHE::try_hit(const tag_lookup_type& handle_pkt)
   }
 
   if (hit) {
-    if (handle_pkt.ld_type == LOAD_TYPE::BYTECODE) {
+    if (handle_pkt.ld_type == LOAD_TYPE::BLW) {
       ++sim_stats.bytecode_hits[champsim::to_underlying(handle_pkt.type)][handle_pkt.cpu];
-    } else if (handle_pkt.ld_type == LOAD_TYPE::DISPATCH_TABLE) {
+    } else if (handle_pkt.ld_type == LOAD_TYPE::BTG) {
       ++sim_stats.table_hits[champsim::to_underlying(handle_pkt.type)][handle_pkt.cpu];
     } else {
       ++sim_stats.hits[champsim::to_underlying(handle_pkt.type)][handle_pkt.cpu];
@@ -300,9 +300,9 @@ bool CACHE::handle_miss(const tag_lookup_type& handle_pkt)
       MSHR.back().pf_metadata = fwd_pkt.pf_metadata;
     }
   }
-  if (handle_pkt.ld_type == LOAD_TYPE::BYTECODE){
+  if (handle_pkt.ld_type == LOAD_TYPE::BLW){
     ++sim_stats.bytecode_miss[champsim::to_underlying(handle_pkt.type)][handle_pkt.cpu];
-  } else if (handle_pkt.ld_type == LOAD_TYPE::DISPATCH_TABLE) {
+  } else if (handle_pkt.ld_type == LOAD_TYPE::BTG) {
      ++sim_stats.table_miss[champsim::to_underlying(handle_pkt.type)][handle_pkt.cpu];
   } else {
     ++sim_stats.misses[champsim::to_underlying(handle_pkt.type)][handle_pkt.cpu];

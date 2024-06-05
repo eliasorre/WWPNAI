@@ -122,7 +122,7 @@ void O3_CPU::initialize_instruction()
   while (current_cycle >= fetch_resume_cycle && instrs_to_read_this_cycle > 0 && !std::empty(input_queue)) {
     instrs_to_read_this_cycle--;
     if constexpr (champsim::skip_dispatch) {
-      if (input_queue.front().ld_type == load_type::INITIAL_POINT || input_queue.front().ld_type == load_type::BYTECODE) {
+      if (input_queue.front().ld_type == load_type::INITIAL || input_queue.front().ld_type == load_type::BLW) {
         reorder_queues();
       }
     }
@@ -132,12 +132,15 @@ void O3_CPU::initialize_instruction()
 
     if constexpr (champsim::skip_dispatch) {
       // Add to IFETCH_BUFFER
-      if (queue_front.ld_type != load_type::BYTECODE) {
+      if (queue_front.ld_type != load_type::BLW) {
         IFETCH_BUFFER.push_back(queue_front);
         input_queue.pop_front();
       } else {
         sim_stats.bytecodes_seen++;
         uint64_t bytecode_pc = queue_front.source_memory.front();
+        if (bytecode_pc > sim_stats.bpc_max) sim_stats.bpc_max = bytecode_pc;
+        if (bytecode_pc < sim_stats.bpc_min) sim_stats.bpc_min = bytecode_pc;
+
         uint64_t fetch_pc = 0;
         int instr_opcode = queue_front.load_val & 0xFF;
         int instr_oparg{0};
@@ -163,7 +166,7 @@ void O3_CPU::initialize_instruction()
           sim_stats.hitsAndMissesAtPC[queue_front.ip].first++;
           shouldFetch = bytecode_module.bb_buffer.shouldFetch(bytecode_pc);
           fetch_pc = bytecode_pc;
-          if (target != nullptr) {
+          if (target != nullptr && !warmup) {
             fetch_resume_cycle = std::numeric_limits<uint64_t>::max();
             bytecode_buffer_miss = true;
             if (bytecode_module.bb_buffer.currFetching.first != false) {
@@ -181,11 +184,12 @@ void O3_CPU::initialize_instruction()
         if (target != nullptr) {
           // STOP FETCHING AS THIS IS BRANCHING TYPE
           if (bytecode_module.hdbt.hit(instr_opcode)) {
-            if (!correctPrediction && queue_front.ld_type == load_type::BYTECODE) {
+            if (!correctPrediction && queue_front.ld_type == load_type::BLW) {
               queue_front.ld_type = load_type::MISS_BPC_PRED;
               miss_BPC_cycle = this->current_cycle;
               IFETCH_BUFFER.push_back(queue_front);
-              miss_BPC_pred = true;
+              if (!warmup)
+                miss_BPC_pred = true;
               sim_stats.miss_bpc++;
             }
             stop_fetch = true;
@@ -208,7 +212,7 @@ void O3_CPU::initialize_instruction()
           fetch_packet.instr_id = input_queue.front().instr_id;
           fetch_packet.ip = fetch_pc;
           fetch_packet.instr_depend_on_me = {};
-          fetch_packet.ld_type = LOAD_TYPE::BYTECODE;
+          fetch_packet.ld_type = LOAD_TYPE::BLW;
           if (!L1I_bus.issue_read(fetch_packet))
             fmt::print(stderr, "Issue when fetching bytecode \n");
         }
@@ -247,7 +251,7 @@ ooo_model_instr* O3_CPU::find_skip_target(const ooo_model_instr& queue_front)
       return const_cast<ooo_model_instr*>(&instr);
     }
 
-    if (instr.ld_type == load_type::BYTECODE && instr.instr_id != queue_front.instr_id) {
+    if (instr.ld_type == load_type::BLW && instr.instr_id != queue_front.instr_id) {
       sim_stats.stopppedEarly++;
       sim_stats.StoppedEarlyPCs[queue_front.ip]++;
       int i = 0;
@@ -256,7 +260,7 @@ ooo_model_instr* O3_CPU::find_skip_target(const ooo_model_instr& queue_front)
       }
       return nullptr;
     }
-    if (instr.ld_type == load_type::DISPATCH_TABLE) {
+    if (instr.ld_type == load_type::BTG) {
       predicted_ip = instr.load_val;
     } else if (instr.ld_type == load_type::COMBINED_JUMP) {
       predicted_ip = instr.branch_target;
@@ -288,7 +292,7 @@ ooo_model_instr* O3_CPU::find_skip_target(const ooo_model_instr& queue_front)
       return const_cast<ooo_model_instr*>(&instr);
     }
 
-    if (instr.ld_type == load_type::BYTECODE && instr.instr_id != queue_front.instr_id) {
+    if (instr.ld_type == load_type::BLW && instr.instr_id != queue_front.instr_id) {
       sim_stats.stopppedEarly++;
       sim_stats.StoppedEarlyPCs[queue_front.ip]++;
       int i = 0;
@@ -297,7 +301,7 @@ ooo_model_instr* O3_CPU::find_skip_target(const ooo_model_instr& queue_front)
       }
       return nullptr;
     }
-    if (instr.ld_type == load_type::DISPATCH_TABLE) {
+    if (instr.ld_type == load_type::BTG) {
       predicted_ip = instr.load_val;
     }
     if (instr.ld_type == load_type::COMBINED_JUMP) {
@@ -332,7 +336,7 @@ void O3_CPU::reorder_queues()
   for (auto const& instr : input_queue) {
     if (instr.instr_id == instrId_front)
       continue;
-    if (instr.ld_type == load_type::BYTECODE || instr.ld_type == load_type::NOT_SKIP) {
+    if (instr.ld_type == load_type::BLW || instr.ld_type == load_type::NOT_SKIP) {
       reorder_needed = true;
       break;
     }
@@ -348,7 +352,7 @@ void O3_CPU::reorder_queues()
     for (auto const& instr : trace_queue) {
       if (instr.instr_id == instrId_front)
         continue;
-      if (instr.ld_type == load_type::BYTECODE || instr.ld_type == load_type::NOT_SKIP) {
+      if (instr.ld_type == load_type::BLW || instr.ld_type == load_type::NOT_SKIP) {
         reorder_needed = true;
         break;
       }
@@ -372,13 +376,13 @@ void O3_CPU::reorder_queues()
         if (instr.branch_taken) {
           return; // If branching out before dispatch finishes we should not skip -> no reorder required
         }
-      } else if (instr.ld_type == load_type::BYTECODE) {
+      } else if (instr.ld_type == load_type::BLW) {
         dispatch_instrs.push_front(instr);
         if (foundABytecode) {
           fmt::print(stderr, "Found two bytecodes inside a dispatch? \n");
         }
         foundABytecode = true;
-      } else if (instr.ld_type == load_type::DISPATCH_TABLE) {
+      } else if (instr.ld_type == load_type::BTG) {
         dispatch_instrs.push_back(instr);
         jmp_addr = instr.load_val;
       } else if (instr.ld_type == load_type::COMBINED_JUMP || instr.ld_type == load_type::JUMP_POINT) {
@@ -559,7 +563,7 @@ void O3_CPU::do_check_dib(ooo_model_instr& instr)
 
     if constexpr (champsim::skip_dispatch) {
       // return result of fetching bytecode instructions to the Bytecode buffer
-      if (instr.ld_type == load_type::BYTECODE) {
+      if (instr.ld_type == load_type::BLW) {
         bool foundCurrNeeded = bytecode_module.bb_buffer.updateBufferEntries(instr.ip, this->current_cycle);
         if constexpr (BB_DEBUG_LEVEL > 2)
           fmt::print("[BYTECODE BUFFER] entry was in dib, instr id {}, pc {} \n", instr.instr_id, instr.ip);
@@ -631,7 +635,7 @@ bool O3_CPU::do_fetch_instruction(std::deque<ooo_model_instr>::iterator begin, s
   }
   if constexpr (BB_DEBUG_LEVEL > 2) {
     for (auto const& dependent : fetch_packet.instr_depend_on_me) {
-      if (dependent.get().ld_type == load_type::BYTECODE) {
+      if (dependent.get().ld_type == load_type::BLW) {
         fmt::print("[IFETCH] dependent of {} is a bytecode load, instr_id of dependent: {}, pc of dependent: {} \n", fetch_packet.instr_id,
                    dependent.get().instr_id, dependent.get().ip);
       }

@@ -98,6 +98,9 @@ void champsim::plain_printer::print(O3_CPU::stats_type stats)
           fmt::print(stream, "\t [{}] hits: {}, # switched: {}, # miss: {} \n", entry.opcode, entry.hits, entry.timesSwitchedOut, entry.miss);
     }
 
+    fmt::print(stream, "BPC range: {} \n", stats.bpc_max - stats.bpc_min);
+    fmt::print(stream, "BYTECODE BTB: \n\t very large jumps: {} \n\t large jumps: {} \n\t small jumps: {} \n", stats.bb_mod.very_large_jumps, stats.bb_mod.large_jumps, stats.bb_mod.small_jumps);
+  
     fmt::print(stream, "BYTECODE BTB - strong: {}, weak: {}, wrong: {}, total mispredicts: {}, total lost cycles to mispredict: {} \n", stats.bb_mod.strongly_correct, stats.bb_mod.weakly_correct, stats.bb_mod.wrong, stats.miss_bpc, stats.miss_BPC_pred_penalty);
     
     fmt::print(stream, "BYTECODE BTB ENTRIES:\n");

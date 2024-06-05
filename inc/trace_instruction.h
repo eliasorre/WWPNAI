@@ -72,14 +72,14 @@ enum load_type : unsigned {
   NOT_IMPLEMENTED = 0,
   NOT_LOAD = 1,
   STANDARD_DATA = 2,
-  BYTECODE = 3,
-  DISPATCH_TABLE  = 4,
+  BLW = 3,
+  BTG  = 4,
   JUMP_POINT = 5,
-  INITIAL_POINT = 6,
+  INITIAL = 6,
   COMBINED_JUMP = 7,
-  OTHER_DISPATCH_JUMP = 8,
+  OTHER_DISPATCH_JUMP = 8, // Not used
   NOT_SKIP = 9,
-  MISS_BPC_PRED = 10
+  MISS_BPC_PRED = 10 // Used internally in the simulator to inform of BPC pred miss
 };
 
 struct bytecode_instr {

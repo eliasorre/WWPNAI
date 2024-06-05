@@ -6,7 +6,6 @@
 
 from sys import argv
 from math import factorial
-from multiprocessing import cpu_count, Pool
 from itertools import islice, starmap
 from time import sleep
 
@@ -82,7 +81,7 @@ def fannkuch(n):
     else:
         assert(n > 0)
 
-        task_count = cpu_count()
+        task_count = 1
         total = factorial(n)
         task_size = (total + task_count - 1) // task_count
 
@@ -94,11 +93,7 @@ def fannkuch(n):
 
         task_args = [(n, i * task_size, task_size) for i in range(task_count)]
 
-        if task_count > 1:
-            with Pool() as pool:
-                checksums, maximums = zip(*pool.starmap(task, task_args))
-        else:
-            checksums, maximums = zip(*starmap(task, task_args))
+        checksums, maximums = zip(*starmap(task, task_args))
 
         checksum, maximum = sum(checksums), max(maximums)
         print("{0}\nPfannkuchen({1}) = {2}".format(checksum, n, maximum))
@@ -109,6 +104,3 @@ if __name__ == "__main__":
         pipe.write("start\n")
     sleep(2)
     fannkuch(int(argv[1]))
-    with open(pipe_path, "w") as pipe:
-        pipe.write("stop\n")
-    sleep(2)
