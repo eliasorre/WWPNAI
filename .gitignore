@@ -1,0 +1,6 @@
+*.json
+*.pyc
+*.png
+*.gif
+.history/**
+*.so
