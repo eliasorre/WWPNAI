@@ -240,7 +240,7 @@ void BranchOrNot(UINT32 taken, BOOL isStandardJumpPoint, BOOL isCombinedJump)
 }
 
 void NotSkip() { curr_instr.ld_type = load_type::NOT_SKIP; }
-void Initial_Dispatch() { curr_instr.ld_type = load_type::INITIAL_POINT; }
+void Initial_Dispatch() { curr_instr.ld_type = load_type::INITIAL; }
 
 template <typename T>
 void WriteToSet(T* begin, T* end, UINT32 r)
@@ -257,10 +257,10 @@ void MemoryLoadType(BOOL bytecodeLoad, BOOL dispatchTableLoad)
     return;
   if (bytecodeLoad) {
     seenBytecodes++;
-    curr_instr.ld_type = load_type::BYTECODE;
+    curr_instr.ld_type = load_type::BLW;
   } else if (dispatchTableLoad) {
     seenTableLoads++;
-    curr_instr.ld_type = load_type::DISPATCH_TABLE;
+    curr_instr.ld_type = load_type::BTG;
   } else {
     if (curr_instr.ld_type == load_type::NOT_LOAD) curr_instr.ld_type = load_type::STANDARD_DATA;
   }
