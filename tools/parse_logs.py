@@ -137,6 +137,18 @@ def main(log_folder, output_csv, size_test):
         "mandelbrot" : "python",
         "fannkuch-redux" : "python"
     }
+    
+    trace_file_name_corrected = {
+        "nbody": "n-body",
+        "binary": "binary-trees",
+        "knucleotide": "k-nucleotide",
+        "fasta": "fasta",
+        "recog": "object-recognition",
+        "decoder": "video-decoding",
+        "spectralnorm" : "spectralnorm",
+        "mandelbrot" : "mandelbrot",
+        "fannkuch-redux" : "fannkuch-redux"
+    }
 
     for root, _, files in os.walk(log_folder):
         for file in files:
@@ -147,7 +159,7 @@ def main(log_folder, output_csv, size_test):
                 print(f"No relevant data found in {log_path}")
                 continue
             trace_file = os.path.basename(log_path).split('_')[0]
-            print(trace_file)
+            
             log_type = "_".join(os.path.basename(log_path).split('_')[-2:])
             if size_test:
                 size = log_type
@@ -164,9 +176,10 @@ def main(log_folder, output_csv, size_test):
                     optimized = "no"
                 
             trace_type = trace_types.get(trace_file, 'unknown')
+            correct_trace_file = trace_file_name_corrected.get(trace_file, 'unknown')
             print(trace_type)
             row = {
-                'Trace File': trace_file,
+                'Trace File': correct_trace_file,
                 'Size' : size,
                 'Optimized' : optimized,
                 'Type': trace_type,
